@@ -42,6 +42,7 @@ fn ensure_zvec_source(workspace_dir: &Path) -> PathBuf {
 fn main() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_dir = manifest_dir.parent().expect("Expected parent directory");
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
 
     println!("cargo:rerun-if-env-changed=ZVEC_GIT_REF");
     println!("cargo:rerun-if-env-changed=ZVEC_BUILD_TYPE");
@@ -59,7 +60,7 @@ fn main() {
         .unwrap_or_else(|_| num_cpus());
 
     let wrapper_dir = manifest_dir.join("zvec-c-wrapper");
-    let wrapper_build = wrapper_dir.join("build");
+    let wrapper_build = out_dir.join("zvec-c-wrapper-build");
 
     let zvec_built = zvec_lib.join("libzvec_db.a");
     if !zvec_built.exists() {
@@ -124,7 +125,7 @@ fn build_zvec(_src: &Path, build: &Path, build_type: &str, parallel_jobs: usize)
 }
 
 fn build_c_wrapper(
-    _wrapper_dir: &Path,
+    wrapper_dir: &Path,
     build: &Path,
     zvec_src: &Path,
     build_type: &str,
@@ -136,7 +137,7 @@ fn build_c_wrapper(
         Command::new("cmake").current_dir(build).args([
             format!("-DZVEC_SRC_DIR={}", zvec_src.display()).as_str(),
             format!("-DCMAKE_BUILD_TYPE={}", build_type).as_str(),
-            "..",
+            wrapper_dir.to_str().expect("Invalid wrapper dir path"),
         ]),
         "cmake configure for C wrapper",
     );
