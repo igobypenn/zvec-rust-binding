@@ -58,7 +58,7 @@ fn main() {
         .map(|s| s.parse::<usize>().unwrap_or_else(|_| num_cpus()))
         .unwrap_or_else(|_| num_cpus());
 
-    let wrapper_dir = workspace_dir.join("zvec-c-wrapper");
+    let wrapper_dir = manifest_dir.join("zvec-c-wrapper");
     let wrapper_build = wrapper_dir.join("build");
 
     let zvec_built = zvec_lib.join("libzvec_db.a");
