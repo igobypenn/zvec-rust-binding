@@ -86,13 +86,18 @@ impl Drop for FieldSchema {
 
 pub struct CollectionSchema {
     pub(crate) ptr: *mut ffi::zvec_collection_schema_t,
+    owned: bool,
 }
 
 impl CollectionSchema {
     pub fn new(name: &str) -> Self {
         let name_c = CString::new(name).unwrap();
         let ptr = unsafe { ffi::zvec_collection_schema_new(name_c.as_ptr()) };
-        Self { ptr }
+        Self { ptr, owned: true }
+    }
+
+    pub(crate) fn from_ptr(ptr: *mut ffi::zvec_collection_schema_t) -> Self {
+        Self { ptr, owned: false }
     }
 
     pub fn add_field(&mut self, field: FieldSchema) -> Result<()> {
@@ -110,11 +115,47 @@ impl CollectionSchema {
             }
         }
     }
+
+    pub fn field_names(&self) -> Vec<String> {
+        let arr = unsafe { ffi::zvec_collection_schema_field_names(self.ptr) };
+        let mut names = Vec::with_capacity(arr.count);
+        for i in 0..arr.count {
+            unsafe {
+                if !arr.strings.add(i).is_null() {
+                    let s = std::ffi::CStr::from_ptr(*arr.strings.add(i));
+                    if let Ok(name) = s.to_str() {
+                        names.push(name.to_string());
+                    }
+                }
+            }
+        }
+        let mut arr_mut = arr;
+        unsafe { ffi::zvec_string_array_free(&mut arr_mut) };
+        names
+    }
+
+    pub fn vector_field_names(&self) -> Vec<String> {
+        let arr = unsafe { ffi::zvec_collection_schema_vector_field_names(self.ptr) };
+        let mut names = Vec::with_capacity(arr.count);
+        for i in 0..arr.count {
+            unsafe {
+                if !arr.strings.add(i).is_null() {
+                    let s = std::ffi::CStr::from_ptr(*arr.strings.add(i));
+                    if let Ok(name) = s.to_str() {
+                        names.push(name.to_string());
+                    }
+                }
+            }
+        }
+        let mut arr_mut = arr;
+        unsafe { ffi::zvec_string_array_free(&mut arr_mut) };
+        names
+    }
 }
 
 impl Drop for CollectionSchema {
     fn drop(&mut self) {
-        if !self.ptr.is_null() {
+        if self.owned && !self.ptr.is_null() {
             unsafe { ffi::zvec_collection_schema_free(self.ptr) };
         }
     }

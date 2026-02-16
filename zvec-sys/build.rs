@@ -2,7 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ZVEC_GIT_REF: &str = "v0.1.1";
+const ZVEC_GIT_REF: &str = "v0.2.0";
 
 fn ensure_zvec_source(workspace_dir: &Path) -> PathBuf {
     let zvec_src = workspace_dir.join("vendor/zvec");

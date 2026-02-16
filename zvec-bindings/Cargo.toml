@@ -10,7 +10,7 @@ categories = ["database", "science"]
 readme = "README.md"
 
 [dependencies]
-zvec-sys = { version = "0.1.1", path = "../zvec-sys" }
+zvec-sys = { version = "0.2.0", path = "../zvec-sys" }
 thiserror.workspace = true
 
 [dev-dependencies]

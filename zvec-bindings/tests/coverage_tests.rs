@@ -1,8 +1,8 @@
 use tempfile::TempDir;
 use zvec_bindings::{
     create_and_open, open, Collection, CollectionSchema, DataType, Doc, FieldSchema,
-    GroupByVectorQuery, IndexParams, IndexType, MetricType, QuantizeType, VectorQuery,
-    VectorSchema,
+    GroupByVectorQuery, HnswQueryParam, IVFQueryParam, IndexParams, IndexType, LogLevel, LogType,
+    MetricType, QuantizeType, StatusCode, VectorQuery, VectorSchema,
 };
 
 fn tempdir() -> zvec_bindings::Result<TempDir> {
@@ -696,6 +696,288 @@ mod coverage_tests {
 
         let err = zvec_bindings::Error::FieldNotFound("test".to_string());
         assert!(format!("{}", err).contains("test"));
+    }
+
+    #[test]
+    fn test_log_level_variants() {
+        assert_eq!(LogLevel::Debug as i32, 0);
+        assert_eq!(LogLevel::Info as i32, 1);
+        assert_eq!(LogLevel::Warn as i32, 2);
+        assert_eq!(LogLevel::Error as i32, 3);
+        assert_eq!(LogLevel::Fatal as i32, 4);
+        assert_eq!(LogLevel::Warning as i32, LogLevel::Warn as i32);
+    }
+
+    #[test]
+    fn test_log_type_variants() {
+        assert_eq!(LogType::Console as i32, 0);
+        assert_eq!(LogType::File as i32, 1);
+    }
+
+    #[test]
+    fn test_status_code_variants() {
+        assert_eq!(StatusCode::Ok as u32, 0);
+        assert_eq!(StatusCode::NotFound as u32, 1);
+        assert_eq!(StatusCode::AlreadyExists as u32, 2);
+        assert_eq!(StatusCode::InvalidArgument as u32, 3);
+        assert_eq!(StatusCode::NotSupported as u32, 4);
+        assert_eq!(StatusCode::InternalError as u32, 5);
+        assert_eq!(StatusCode::PermissionDenied as u32, 6);
+        assert_eq!(StatusCode::FailedPrecondition as u32, 7);
+        assert_eq!(StatusCode::Unknown as u32, 8);
+    }
+
+    #[test]
+    fn test_status_code_from_u32() {
+        assert_eq!(StatusCode::from(0), StatusCode::Ok);
+        assert_eq!(StatusCode::from(1), StatusCode::NotFound);
+        assert_eq!(StatusCode::from(99), StatusCode::Unknown);
+    }
+
+    #[test]
+    fn test_hnsw_query_param() {
+        let params = HnswQueryParam::new(256);
+        assert_eq!(params.ef_search(), 256);
+    }
+
+    #[test]
+    fn test_ivf_query_param() {
+        let params = IVFQueryParam::new(32);
+        assert_eq!(params.nprobe(), 32);
+    }
+
+    #[test]
+    fn test_vector_query_with_hnsw_params() -> zvec_bindings::Result<()> {
+        let query = VectorQuery::new("embedding")
+            .topk(10)
+            .hnsw_params(256)
+            .vector(&[1.0, 0.0, 0.0, 0.0])?;
+        drop(query);
+        Ok(())
+    }
+
+    #[test]
+    fn test_vector_query_with_ivf_params() -> zvec_bindings::Result<()> {
+        let query = VectorQuery::new("embedding")
+            .topk(10)
+            .ivf_params(16)
+            .vector(&[1.0, 0.0, 0.0, 0.0])?;
+        drop(query);
+        Ok(())
+    }
+
+    #[test]
+    fn test_vector_query_with_id() {
+        let query = VectorQuery::new("embedding").topk(10).id("doc_123");
+
+        assert!(query.has_id());
+        assert!(!query.has_vector());
+        assert_eq!(query.get_id(), Some("doc_123"));
+    }
+
+    #[test]
+    fn test_vector_query_without_id() -> zvec_bindings::Result<()> {
+        let query = VectorQuery::new("embedding")
+            .topk(10)
+            .vector(&[1.0, 0.0, 0.0, 0.0])?;
+
+        assert!(!query.has_id());
+        assert!(query.has_vector());
+        assert_eq!(query.get_id(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_collection_stats() -> zvec_bindings::Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("test_db");
+        let collection = create_collection(&path)?;
+
+        let mut doc1 = Doc::id("doc_1");
+        doc1.set_vector("embedding", &[0.1, 0.2, 0.3, 0.4])?;
+        let mut doc2 = Doc::id("doc_2");
+        doc2.set_vector("embedding", &[0.5, 0.6, 0.7, 0.8])?;
+        collection.insert(&[doc1, doc2])?;
+        collection.flush()?;
+
+        let stats = collection.stats()?;
+        assert_eq!(stats.doc_count(), 2);
+        let _ = stats.memory_usage();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_collection_schema_field_names() -> zvec_bindings::Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("test_db");
+
+        let mut schema = CollectionSchema::new("test");
+        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(FieldSchema::int64("count"))?;
+        schema.add_field(FieldSchema::string("name"))?;
+        let collection = create_and_open(&path, schema)?;
+
+        let schema = collection.schema()?;
+        let field_names = schema.field_names();
+        assert!(!field_names.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_collection_schema_vector_field_names() -> zvec_bindings::Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("test_db");
+
+        let mut schema = CollectionSchema::new("test");
+        schema.add_field(VectorSchema::fp32("embedding_a", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding_b", 4).into())?;
+        schema.add_field(FieldSchema::int64("count"))?;
+        let collection = create_and_open(&path, schema)?;
+
+        let schema = collection.schema()?;
+        let vector_names = schema.vector_field_names();
+        assert_eq!(vector_names.len(), 2);
+        assert!(vector_names.contains(&"embedding_a".to_string()));
+        assert!(vector_names.contains(&"embedding_b".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_doc_ref_get_bool() -> zvec_bindings::Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("test_db");
+
+        let mut schema = CollectionSchema::new("test");
+        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(FieldSchema::bool_("active"))?;
+        let collection = create_and_open(&path, schema)?;
+
+        let mut doc = Doc::id("test_doc");
+        doc.set_vector("embedding", &[0.1, 0.2, 0.3, 0.4])?;
+        doc.set_bool("active", true)?;
+        collection.insert(&[doc])?;
+
+        let fetched = collection.fetch(&["test_doc"])?;
+        let doc = fetched.get("test_doc").expect("Document should exist");
+        assert_eq!(doc.get_bool("active"), Some(true));
+        assert!(doc.get_bool("nonexistent").is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_doc_ref_get_int32() -> zvec_bindings::Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("test_db");
+
+        let mut schema = CollectionSchema::new("test");
+        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(FieldSchema::int32("value"))?;
+        let collection = create_and_open(&path, schema)?;
+
+        let mut doc = Doc::id("test_doc");
+        doc.set_vector("embedding", &[0.1, 0.2, 0.3, 0.4])?;
+        doc.set_int32("value", 12345)?;
+        collection.insert(&[doc])?;
+
+        let fetched = collection.fetch(&["test_doc"])?;
+        let doc = fetched.get("test_doc").expect("Document should exist");
+        assert_eq!(doc.get_int32("value"), Some(12345));
+        assert!(doc.get_int32("nonexistent").is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_doc_ref_get_double() -> zvec_bindings::Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("test_db");
+
+        let mut schema = CollectionSchema::new("test");
+        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(FieldSchema::double("precise_value"))?;
+        let collection = create_and_open(&path, schema)?;
+
+        let mut doc = Doc::id("test_doc");
+        doc.set_vector("embedding", &[0.1, 0.2, 0.3, 0.4])?;
+        doc.set_double("precise_value", 3.14159265358979)?;
+        collection.insert(&[doc])?;
+
+        let fetched = collection.fetch(&["test_doc"])?;
+        let doc = fetched.get("test_doc").expect("Document should exist");
+        let val = doc.get_double("precise_value");
+        assert!(val.is_some());
+        assert!((val.unwrap() - 3.14159265358979).abs() < 1e-10);
+        assert!(doc.get_double("nonexistent").is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_rrf_reranker_basic() {
+        use std::collections::HashMap;
+        use zvec_bindings::RrfReRanker;
+
+        let reranker = RrfReRanker::new(10);
+        assert_eq!(reranker.topn(), 10);
+        assert_eq!(reranker.rank_constant(), 60);
+
+        let reranker = reranker.with_rank_constant(100);
+        assert_eq!(reranker.rank_constant(), 100);
+
+        let mut query_results: HashMap<String, Vec<(String, f32)>> = HashMap::new();
+        query_results.insert(
+            "embedding_a".to_string(),
+            vec![("doc_1".to_string(), 0.9), ("doc_2".to_string(), 0.8)],
+        );
+        query_results.insert(
+            "embedding_b".to_string(),
+            vec![("doc_2".to_string(), 0.95), ("doc_3".to_string(), 0.7)],
+        );
+
+        let results = reranker.rerank(&query_results);
+        assert_eq!(results.len(), 3);
+
+        let ids: Vec<&str> = results.iter().map(|(id, _)| id.as_str()).collect();
+        assert!(ids.contains(&"doc_1"));
+        assert!(ids.contains(&"doc_2"));
+        assert!(ids.contains(&"doc_3"));
+    }
+
+    #[test]
+    fn test_weighted_reranker_basic() {
+        use std::collections::HashMap;
+        use zvec_bindings::{MetricType, WeightedReRanker};
+
+        let reranker = WeightedReRanker::new(10, MetricType::L2);
+        assert_eq!(reranker.topn(), 10);
+        assert_eq!(reranker.metric(), MetricType::L2);
+
+        let reranker = reranker
+            .with_weight("embedding_a", 2.0)
+            .with_weight("embedding_b", 1.0);
+
+        let mut query_results: HashMap<String, Vec<(String, f32)>> = HashMap::new();
+        query_results.insert(
+            "embedding_a".to_string(),
+            vec![("doc_1".to_string(), 0.1), ("doc_2".to_string(), 0.2)],
+        );
+        query_results.insert(
+            "embedding_b".to_string(),
+            vec![("doc_2".to_string(), 0.05), ("doc_3".to_string(), 0.3)],
+        );
+
+        let results = reranker.rerank(&query_results);
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn test_init_function() {
+        let result = zvec_bindings::init();
+        assert!(result.is_ok());
     }
 }
 

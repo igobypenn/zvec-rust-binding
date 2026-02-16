@@ -94,7 +94,7 @@ Additional environment variables for customizing the build:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ZVEC_GIT_REF` | `v0.1.1` | zvec version to download (tag or branch) |
+| `ZVEC_GIT_REF` | `v0.2.0` | zvec version to download (tag or branch) |
 | `ZVEC_BUILD_TYPE` | `Release` | CMake build type |
 | `ZVEC_BUILD_PARALLEL` | CPU count | Parallel make jobs |
 | `ZVEC_CPU_ARCH` | auto | CPU architecture optimization |
@@ -194,6 +194,8 @@ fn main() -> zvec_bindings::Result<()> {
 - ✅ `open` - Open an existing collection
 - ✅ `flush` - Flush data to disk
 - ✅ `destroy` - Delete collection storage
+- ✅ `stats` - Get collection statistics
+- ✅ `schema` - Get collection schema
 
 ### DML Operations
 - ✅ `insert` - Insert documents
@@ -211,6 +213,9 @@ fn main() -> zvec_bindings::Result<()> {
 - ✅ `create_index` - Create an index on a column
 - ✅ `drop_index` - Drop an index
 - ✅ `optimize` - Optimize the collection
+- ✅ `add_column` - Add a new column
+- ✅ `drop_column` - Drop a column
+- ✅ `alter_column` - Alter a column
 
 ### Index Types
 - ✅ HNSW (Hierarchical Navigable Small World)
@@ -218,10 +223,29 @@ fn main() -> zvec_bindings::Result<()> {
 - ✅ FLAT (Brute Force)
 - ✅ INVERT (Inverted Index)
 
+### Query Parameters
+- ✅ `HnswQueryParam` - HNSW query parameters (ef_search)
+- ✅ `IVFQueryParam` - IVF query parameters (nprobe)
+
+### Re-ranking
+- ✅ `RrfReRanker` - Reciprocal Rank Fusion re-ranker
+- ✅ `WeightedReRanker` - Weighted score re-ranker
+
 ### Data Types
 - ✅ Scalar types (bool, int32, int64, float, double, string)
 - ✅ Dense vectors (fp16, fp32, fp64, int4, int8, int16)
 - ✅ Sparse vectors (fp16, fp32)
+
+### Enums
+- ✅ `LogLevel` - Logging severity levels
+- ✅ `LogType` - Log output destination
+- ✅ `StatusCode` - Operation status codes
+- ✅ `MetricType` - Distance metrics (L2, IP, Cosine)
+- ✅ `QuantizeType` - Quantization types
+
+### Global Functions
+- ✅ `init()` - Initialize zvec library
+- ✅ `list_registered_metrics()` - List available metrics
 
 ## Project Structure
 

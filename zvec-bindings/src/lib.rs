@@ -113,6 +113,7 @@ pub mod collection;
 pub mod doc;
 pub mod error;
 pub mod query;
+pub mod rerank;
 pub mod schema;
 pub mod types;
 
@@ -120,75 +121,27 @@ pub mod types;
 pub mod sync;
 
 pub use collection::Collection;
+pub use collection::CollectionStats;
 pub use collection::IndexParams;
 pub use doc::Doc;
-pub use error::{Error, Result};
-pub use query::{GroupByVectorQuery, VectorQuery};
+pub use error::{check_status, Error, Result, StatusCode};
+pub use query::{GroupByVectorQuery, HnswQueryParam, IVFQueryParam, VectorQuery};
+pub use rerank::{RrfReRanker, WeightedReRanker};
 pub use schema::{CollectionSchema, FieldSchema, VectorSchema};
-pub use types::{DataType, IndexType, MetricType, QuantizeType};
+pub use types::{DataType, IndexType, LogLevel, LogType, MetricType, QuantizeType};
 
 #[cfg(feature = "sync")]
 pub use sync::{create_and_open_shared, open_shared, SharedCollection};
 
-/// Create and open a new collection at the specified path.
-///
-/// # Arguments
-///
-/// * `path` - Directory path where the collection will be stored
-/// * `schema` - Schema defining the collection's fields
-///
-/// # Errors
-///
-/// Returns an error if the path is invalid or the schema is malformed.
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use zvec_bindings::{create_and_open, CollectionSchema, VectorSchema};
-///
-/// # fn main() -> zvec_bindings::Result<()> {
-/// let mut schema = CollectionSchema::new("my_collection");
-/// schema.add_field(VectorSchema::fp32("embedding", 128).into())?;
-///
-/// let collection = create_and_open("./my_db", schema)?;
-/// # Ok(())
-/// # }
-/// ```
-pub fn create_and_open<P: AsRef<std::path::Path>>(
-    path: P,
-    schema: CollectionSchema,
-) -> Result<Collection> {
-    Collection::create_and_open(path, schema)
+pub fn init() -> Result<()> {
+    let success = unsafe { ffi::zvec_init() };
+    if success {
+        Ok(())
+    } else {
+        Err(Error::InternalError("Failed to initialize zvec".into()))
+    }
 }
 
-/// Open an existing collection at the specified path.
-///
-/// # Arguments
-///
-/// * `path` - Directory path where the collection is stored
-///
-/// # Errors
-///
-/// Returns an error if the path doesn't exist or isn't a valid collection.
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use zvec_bindings::open;
-///
-/// # fn main() -> zvec_bindings::Result<()> {
-/// let collection = open("./my_db")?;
-/// # Ok(())
-/// # }
-/// ```
-pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Collection> {
-    Collection::open(path)
-}
-
-/// List all registered metric types.
-///
-/// Returns the names of all metric types (distance functions) that are
-/// available for use in indexes.
 pub fn list_registered_metrics() -> Vec<String> {
     let mut metrics_ptr: *mut *const std::os::raw::c_char = std::ptr::null_mut();
     let count = unsafe { ffi::zvec_list_registered_metrics(&mut metrics_ptr) };
@@ -210,4 +163,15 @@ pub fn list_registered_metrics() -> Vec<String> {
         }
     }
     result
+}
+
+pub fn create_and_open<P: AsRef<std::path::Path>>(
+    path: P,
+    schema: CollectionSchema,
+) -> Result<Collection> {
+    Collection::create_and_open(path, schema)
+}
+
+pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Collection> {
+    Collection::open(path)
 }

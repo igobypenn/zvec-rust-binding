@@ -404,6 +404,39 @@ impl<'a> DocRef<'a> {
         }
     }
 
+    pub fn get_bool(&self, field: &str) -> Option<bool> {
+        let field_c = CString::new(field).unwrap();
+        let mut value: bool = false;
+        let found = unsafe { ffi::zvec_doc_get_bool(self.ptr, field_c.as_ptr(), &mut value) };
+        if found {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_int32(&self, field: &str) -> Option<i32> {
+        let field_c = CString::new(field).unwrap();
+        let mut value: i32 = 0;
+        let found = unsafe { ffi::zvec_doc_get_int32(self.ptr, field_c.as_ptr(), &mut value) };
+        if found {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_double(&self, field: &str) -> Option<f64> {
+        let field_c = CString::new(field).unwrap();
+        let mut value: f64 = 0.0;
+        let found = unsafe { ffi::zvec_doc_get_double(self.ptr, field_c.as_ptr(), &mut value) };
+        if found {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
     pub fn get_vector(&self, field: &str) -> Option<Vec<f32>> {
         let field_c = CString::new(field).unwrap();
         let mut buf = vec![0.0f32; 4096];

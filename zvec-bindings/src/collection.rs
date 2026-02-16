@@ -6,8 +6,28 @@ use crate::doc::{Doc, DocList, DocMap, WriteResults};
 use crate::error::{check_status, Result};
 use crate::ffi;
 use crate::query::{GroupByVectorQuery, GroupResults, VectorQuery};
-use crate::schema::CollectionSchema;
+use crate::schema::{CollectionSchema, FieldSchema};
 use crate::types::{IndexType, MetricType, QuantizeType};
+
+pub struct CollectionStats {
+    pub doc_count: u64,
+    pub memory_usage: u64,
+    pub json_details: Option<String>,
+}
+
+impl CollectionStats {
+    pub fn doc_count(&self) -> u64 {
+        self.doc_count
+    }
+
+    pub fn memory_usage(&self) -> u64 {
+        self.memory_usage
+    }
+
+    pub fn json_details(&self) -> Option<&str> {
+        self.json_details.as_deref()
+    }
+}
 
 /// A collection of documents with vector search capabilities.
 ///
@@ -258,6 +278,96 @@ impl Collection {
     /// Flush pending writes to disk.
     pub fn flush(&self) -> Result<()> {
         let status = unsafe { ffi::zvec_collection_flush(self.ptr) };
+        check_status(status)
+    }
+
+    /// Get collection statistics.
+    pub fn stats(&self) -> Result<CollectionStats> {
+        let mut stats_ptr: *mut ffi::zvec_collection_stats_t = ptr::null_mut();
+        let status = unsafe { ffi::zvec_collection_stats(self.ptr, &mut stats_ptr) };
+        check_status(status)?;
+
+        if stats_ptr.is_null() {
+            return Err(crate::error::Error::InternalError(
+                "Failed to get collection stats: null pointer".into(),
+            ));
+        }
+
+        let stats = unsafe { &*stats_ptr };
+        let doc_count = stats.doc_count;
+        let memory_usage = stats.memory_usage;
+        let json_details = if stats.json_details.is_null() {
+            None
+        } else {
+            Some(unsafe {
+                std::ffi::CStr::from_ptr(stats.json_details)
+                    .to_string_lossy()
+                    .into_owned()
+            })
+        };
+
+        unsafe { ffi::zvec_collection_stats_free(stats_ptr) };
+
+        Ok(CollectionStats {
+            doc_count,
+            memory_usage,
+            json_details,
+        })
+    }
+
+    /// Get the collection schema.
+    pub fn schema(&self) -> Result<CollectionSchema> {
+        let mut schema_ptr: *mut ffi::zvec_collection_schema_t = ptr::null_mut();
+        let status = unsafe { ffi::zvec_collection_schema(self.ptr, &mut schema_ptr) };
+        check_status(status)?;
+
+        if schema_ptr.is_null() {
+            return Err(crate::error::Error::InternalError(
+                "Failed to get collection schema: null pointer".into(),
+            ));
+        }
+
+        Ok(CollectionSchema::from_ptr(schema_ptr))
+    }
+
+    /// Add a new column to the collection.
+    pub fn add_column(&self, column_schema: FieldSchema, expression: Option<&str>) -> Result<()> {
+        let expr_c = expression.map(|e| CString::new(e).unwrap());
+        let expr_ptr = expr_c.as_ref().map(|e| e.as_ptr()).unwrap_or(ptr::null());
+        let status =
+            unsafe { ffi::zvec_collection_add_column(self.ptr, column_schema.ptr, expr_ptr) };
+        check_status(status)
+    }
+
+    /// Drop a column from the collection.
+    pub fn drop_column(&self, column_name: &str) -> Result<()> {
+        let column_c = CString::new(column_name).unwrap();
+        let status = unsafe { ffi::zvec_collection_drop_column(self.ptr, column_c.as_ptr()) };
+        check_status(status)
+    }
+
+    /// Alter a column in the collection.
+    pub fn alter_column(
+        &self,
+        column_name: &str,
+        rename: Option<&str>,
+        new_column_schema: Option<FieldSchema>,
+    ) -> Result<()> {
+        let rename_c = rename.map(|r| CString::new(r).unwrap());
+        let rename_ptr = rename_c.as_ref().map(|r| r.as_ptr()).unwrap_or(ptr::null());
+        let new_schema_ptr = new_column_schema
+            .as_ref()
+            .map(|s| s.ptr)
+            .unwrap_or(ptr::null_mut());
+        let column_c = CString::new(column_name).unwrap();
+        let status = unsafe {
+            ffi::zvec_collection_alter_column(
+                self.ptr,
+                column_c.as_ptr(),
+                rename_ptr,
+                new_schema_ptr,
+            )
+        };
         check_status(status)
     }
 

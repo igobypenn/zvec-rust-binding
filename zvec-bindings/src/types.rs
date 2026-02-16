@@ -3,6 +3,39 @@
 use crate::ffi::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(i32)]
+pub enum LogLevel {
+    Debug = 0,
+    Info = 1,
+    Warn = 2,
+    Error = 3,
+    Fatal = 4,
+}
+
+impl LogLevel {
+    pub const Warning: Self = Self::Warn;
+}
+
+impl Default for LogLevel {
+    fn default() -> Self {
+        Self::Warn
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(i32)]
+pub enum LogType {
+    Console = 0,
+    File = 1,
+}
+
+impl Default for LogType {
+    fn default() -> Self {
+        Self::Console
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u32)]
 pub enum DataType {
     Undefined = 0,

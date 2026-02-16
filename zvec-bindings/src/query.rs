@@ -3,59 +3,92 @@ use std::ffi::CString;
 use crate::error::{check_status, Result};
 use crate::ffi;
 
-/// A vector similarity search query.
-///
-/// Use the builder pattern to construct queries:
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use zvec_bindings::VectorQuery;
-///
-/// let query = VectorQuery::new("embedding")
-///     .topk(10)
-///     .filter("category = 'electronics'")
-///     .vector(&[0.1, 0.2, 0.3, 0.4])?;
-/// # Ok::<(), zvec_bindings::Error>(())
-/// ```
+pub struct HnswQueryParam {
+    pub(crate) ptr: *mut ffi::zvec_query_params_t,
+    ef_search: i32,
+}
+
+impl HnswQueryParam {
+    pub fn new(ef_search: i32) -> Self {
+        let ptr = unsafe { ffi::zvec_query_params_new_hnsw(ef_search) };
+        Self { ptr, ef_search }
+    }
+
+    pub fn ef_search(&self) -> i32 {
+        self.ef_search
+    }
+}
+
+impl Drop for HnswQueryParam {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            unsafe { ffi::zvec_query_params_free(self.ptr) };
+        }
+    }
+}
+
+pub struct IVFQueryParam {
+    pub(crate) ptr: *mut ffi::zvec_query_params_t,
+    nprobe: i32,
+}
+
+impl IVFQueryParam {
+    pub fn new(nprobe: i32) -> Self {
+        let ptr = unsafe { ffi::zvec_query_params_new_ivf(nprobe) };
+        Self { ptr, nprobe }
+    }
+
+    pub fn nprobe(&self) -> i32 {
+        self.nprobe
+    }
+}
+
+impl Drop for IVFQueryParam {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            unsafe { ffi::zvec_query_params_free(self.ptr) };
+        }
+    }
+}
+
+pub enum QueryParam {
+    Hnsw(HnswQueryParam),
+    IVF(IVFQueryParam),
+}
+
 pub struct VectorQuery {
     pub(crate) ptr: *mut ffi::zvec_vector_query_t,
+    id: Option<String>,
 }
 
 impl VectorQuery {
-    /// Create a new query for the specified vector field.
     pub fn new(field_name: &str) -> Self {
         let field_c = CString::new(field_name).unwrap();
         let ptr = unsafe { ffi::zvec_vector_query_new(field_c.as_ptr()) };
-        Self { ptr }
+        Self { ptr, id: None }
     }
 
-    /// Set the number of results to return (default: 10).
     pub fn topk(self, topk: usize) -> Self {
         unsafe { ffi::zvec_vector_query_set_topk(self.ptr, topk as std::os::raw::c_int) };
         self
     }
 
-    /// Set a filter expression to narrow results.
     pub fn filter(self, filter: &str) -> Self {
         let filter_c = CString::new(filter).unwrap();
         unsafe { ffi::zvec_vector_query_set_filter(self.ptr, filter_c.as_ptr()) };
         self
     }
 
-    /// Whether to include vector values in results.
     pub fn include_vector(self, include: bool) -> Self {
         unsafe { ffi::zvec_vector_query_set_include_vector(self.ptr, include) };
         self
     }
 
-    /// Whether to include document IDs in results.
     pub fn include_doc_id(self, include: bool) -> Self {
         unsafe { ffi::zvec_vector_query_set_include_doc_id(self.ptr, include) };
         self
     }
 
-    /// Set which fields to include in results.
     pub fn output_fields(self, fields: &[&str]) -> Self {
         let fields_c: Vec<CString> = fields.iter().map(|f| CString::new(*f).unwrap()).collect();
         let mut fields_ptr: Vec<*const std::os::raw::c_char> =
@@ -70,7 +103,26 @@ impl VectorQuery {
         self
     }
 
-    /// Set the query vector for dense vectors.
+    pub fn query_params(self, params: QueryParam) -> Self {
+        let ptr = match &params {
+            QueryParam::Hnsw(p) => p.ptr,
+            QueryParam::IVF(p) => p.ptr,
+        };
+        unsafe { ffi::zvec_vector_query_set_query_params(self.ptr, ptr) };
+        std::mem::forget(params);
+        self
+    }
+
+    pub fn hnsw_params(self, ef_search: i32) -> Self {
+        let params = HnswQueryParam::new(ef_search);
+        self.query_params(QueryParam::Hnsw(params))
+    }
+
+    pub fn ivf_params(self, nprobe: i32) -> Self {
+        let params = IVFQueryParam::new(nprobe);
+        self.query_params(QueryParam::IVF(params))
+    }
+
     pub fn vector(self, vector: &[f32]) -> Result<Self> {
         let status = unsafe {
             ffi::zvec_vector_query_set_vector_fp32(self.ptr, vector.as_ptr(), vector.len())
@@ -79,7 +131,6 @@ impl VectorQuery {
         Ok(self)
     }
 
-    /// Set the query vector for sparse vectors.
     pub fn sparse_vector(self, indices: &[u32], values: &[f32]) -> Result<Self> {
         if indices.len() != values.len() {
             return Err(crate::error::Error::InvalidArgument(
@@ -97,6 +148,27 @@ impl VectorQuery {
         };
         check_status(status)?;
         Ok(self)
+    }
+
+    pub fn id(self, id: impl Into<String>) -> Self {
+        let ptr = self.ptr;
+        std::mem::forget(self);
+        Self {
+            ptr,
+            id: Some(id.into()),
+        }
+    }
+
+    pub fn has_id(&self) -> bool {
+        self.id.is_some()
+    }
+
+    pub fn has_vector(&self) -> bool {
+        self.id.is_none()
+    }
+
+    pub fn get_id(&self) -> Option<&str> {
+        self.id.as_deref()
     }
 }
 

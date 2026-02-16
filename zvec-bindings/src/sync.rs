@@ -17,9 +17,9 @@ use crate::IndexParams;
 /// # Example
 ///
 /// ```rust,no_run
-/// use zvec::{create_and_open_shared, SharedCollection, VectorQuery, VectorSchema, CollectionSchema, Doc};
+/// use zvec_bindings::{create_and_open_shared, SharedCollection, VectorQuery, VectorSchema, CollectionSchema, Doc};
 ///
-/// # fn main() -> zvec::Result<()> {
+/// # fn main() -> zvec_bindings::Result<()> {
 /// let mut schema = CollectionSchema::new("my_collection");
 /// schema.add_field(VectorSchema::fp32("embedding", 128).into())?;
 ///
