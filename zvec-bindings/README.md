@@ -20,7 +20,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zvec-bindings = "0.1"
+zvec-bindings = "0.2.1"
 ```
 
 ### Prerequisites
