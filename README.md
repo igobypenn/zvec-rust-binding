@@ -106,7 +106,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zvec-bindings = "0.2"
+zvec-bindings = "0.3"
 ```
 
 ### Basic Example
@@ -147,7 +147,7 @@ For multi-threaded applications, enable the `sync` feature:
 
 ```toml
 [dependencies]
-zvec-bindings = { version = "0.1", features = ["sync"] }
+zvec-bindings = { version = "0.3", features = ["sync"] }
 ```
 
 ```rust
