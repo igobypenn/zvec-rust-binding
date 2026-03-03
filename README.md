@@ -117,7 +117,7 @@ use zvec_bindings::{create_and_open, CollectionSchema, Doc, VectorQuery, VectorS
 fn main() -> zvec_bindings::Result<()> {
     // Create schema with a vector field
     let mut schema = CollectionSchema::new("example");
-    schema.add_field(VectorSchema::fp32("embedding", 128).into())?;
+    schema.add_field(VectorSchema::fp32("embedding", 128))?;
     
     // Create and open collection
     let collection = create_and_open("./my_vectors", schema)?;
@@ -155,7 +155,7 @@ use zvec_bindings::{create_and_open_shared, SharedCollection, VectorQuery, Vecto
 
 fn main() -> zvec_bindings::Result<()> {
     let mut schema = CollectionSchema::new("example");
-    schema.add_field(VectorSchema::fp32("embedding", 128).into())?;
+    schema.add_field(VectorSchema::fp32("embedding", 128))?;
     
     let collection = create_and_open_shared("./my_vectors", schema)?;
     

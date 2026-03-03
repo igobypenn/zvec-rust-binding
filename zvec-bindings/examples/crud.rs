@@ -8,7 +8,7 @@ fn main() -> zvec_bindings::Result<()> {
     let _ = fs::remove_dir_all(path);
 
     let mut schema = CollectionSchema::new("crud_example");
-    schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+    schema.add_field(VectorSchema::fp32("embedding", 4))?;
     schema.add_field(FieldSchema::string("name"))?;
     schema.add_field(FieldSchema::int64("count"))?;
 

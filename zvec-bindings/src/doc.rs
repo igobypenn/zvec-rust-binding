@@ -32,21 +32,30 @@ impl Doc {
     }
 
     /// Create a new document with the given primary key.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the primary key contains interior NUL bytes.
+    /// For a fallible version, use [`with_pk_mut`].
     pub fn with_pk(pk: impl Into<String>) -> Self {
         let mut doc = Self::new();
-        doc.set_pk(pk);
+        doc.set_pk(pk).expect("primary key contains NUL byte");
         doc
     }
 
     /// Create a new document with the given ID (alias for `with_pk`).
+    ///
+    /// This method is provided for convenience but `with_pk` is preferred
+    /// for consistency with the `pk()` getter and `set_pk()` setter.
+    #[inline]
     pub fn id(id: impl Into<String>) -> Self {
         Self::with_pk(id)
     }
 
     /// Set the primary key and return self for chaining.
-    pub fn with_pk_mut(mut self, pk: impl Into<String>) -> Self {
-        self.set_pk(pk);
-        self
+    pub fn with_pk_mut(mut self, pk: impl Into<String>) -> Result<Self> {
+        self.set_pk(pk)?;
+        Ok(self)
     }
 
     /// Set a vector field and return self for chaining.
@@ -74,9 +83,13 @@ impl Doc {
     }
 
     /// Set the primary key.
-    pub fn set_pk(&mut self, pk: impl Into<String>) {
-        let pk_c = CString::new(pk.into()).unwrap();
+    ///
+    /// Returns an error if the primary key contains interior NUL bytes.
+    pub fn set_pk(&mut self, pk: impl Into<String>) -> Result<()> {
+        let pk_c = CString::new(pk.into())
+            .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
         unsafe { ffi::zvec_doc_set_pk(self.ptr, pk_c.as_ptr()) };
+        Ok(())
     }
 
     /// Get the primary key.
@@ -100,45 +113,45 @@ impl Doc {
     }
 
     pub fn set_bool(&mut self, field: &str, value: bool) -> Result<()> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let status = unsafe { ffi::zvec_doc_set_bool(self.ptr, field_c.as_ptr(), value) };
         check_status(status)
     }
 
     pub fn set_int32(&mut self, field: &str, value: i32) -> Result<()> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let status = unsafe { ffi::zvec_doc_set_int32(self.ptr, field_c.as_ptr(), value) };
         check_status(status)
     }
 
     pub fn set_int64(&mut self, field: &str, value: i64) -> Result<()> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let status = unsafe { ffi::zvec_doc_set_int64(self.ptr, field_c.as_ptr(), value) };
         check_status(status)
     }
 
     pub fn set_float(&mut self, field: &str, value: f32) -> Result<()> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let status = unsafe { ffi::zvec_doc_set_float(self.ptr, field_c.as_ptr(), value) };
         check_status(status)
     }
 
     pub fn set_double(&mut self, field: &str, value: f64) -> Result<()> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let status = unsafe { ffi::zvec_doc_set_double(self.ptr, field_c.as_ptr(), value) };
         check_status(status)
     }
 
     pub fn set_string(&mut self, field: &str, value: &str) -> Result<()> {
-        let field_c = CString::new(field).unwrap();
-        let value_c = CString::new(value).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
+        let value_c = CString::new(value).expect("string value contains NUL byte");
         let status =
             unsafe { ffi::zvec_doc_set_string(self.ptr, field_c.as_ptr(), value_c.as_ptr()) };
         check_status(status)
     }
 
     pub fn set_vector(&mut self, field: &str, vector: &[f32]) -> Result<()> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let status = unsafe {
             ffi::zvec_doc_set_vector_fp32(self.ptr, field_c.as_ptr(), vector.as_ptr(), vector.len())
         };
@@ -156,7 +169,7 @@ impl Doc {
                 "indices and values must have same length".into(),
             ));
         }
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let status = unsafe {
             ffi::zvec_doc_set_sparse_vector_fp32(
                 self.ptr,
@@ -171,7 +184,7 @@ impl Doc {
     }
 
     pub fn get_bool(&self, field: &str) -> Option<bool> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: bool = false;
         let found = unsafe { ffi::zvec_doc_get_bool(self.ptr, field_c.as_ptr(), &mut value) };
         if found {
@@ -182,7 +195,7 @@ impl Doc {
     }
 
     pub fn get_int32(&self, field: &str) -> Option<i32> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: i32 = 0;
         let found = unsafe { ffi::zvec_doc_get_int32(self.ptr, field_c.as_ptr(), &mut value) };
         if found {
@@ -193,7 +206,7 @@ impl Doc {
     }
 
     pub fn get_int64(&self, field: &str) -> Option<i64> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: i64 = 0;
         let found = unsafe { ffi::zvec_doc_get_int64(self.ptr, field_c.as_ptr(), &mut value) };
         if found {
@@ -204,7 +217,7 @@ impl Doc {
     }
 
     pub fn get_float(&self, field: &str) -> Option<f32> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: f32 = 0.0;
         let found = unsafe { ffi::zvec_doc_get_float(self.ptr, field_c.as_ptr(), &mut value) };
         if found {
@@ -215,7 +228,7 @@ impl Doc {
     }
 
     pub fn get_string(&self, field: &str) -> Option<&str> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: *const std::os::raw::c_char = ptr::null();
         let found = unsafe { ffi::zvec_doc_get_string(self.ptr, field_c.as_ptr(), &mut value) };
         if found && !value.is_null() {
@@ -226,7 +239,7 @@ impl Doc {
     }
 
     pub fn get_vector(&self, field: &str) -> Option<Vec<f32>> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut buf = vec![0.0f32; 4096];
         let actual_len = unsafe {
             ffi::zvec_doc_get_vector_fp32(self.ptr, field_c.as_ptr(), buf.as_mut_ptr(), buf.len())
@@ -251,17 +264,17 @@ impl Doc {
     }
 
     pub fn has(&self, field: &str) -> bool {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         unsafe { ffi::zvec_doc_has(self.ptr, field_c.as_ptr()) }
     }
 
     pub fn has_value(&self, field: &str) -> bool {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         unsafe { ffi::zvec_doc_has_value(self.ptr, field_c.as_ptr()) }
     }
 
     pub fn is_null(&self, field: &str) -> bool {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         unsafe { ffi::zvec_doc_is_null(self.ptr, field_c.as_ptr()) }
     }
 }
@@ -372,7 +385,7 @@ impl<'a> DocRef<'a> {
     }
 
     pub fn get_string(&self, field: &str) -> Option<&str> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: *const std::os::raw::c_char = ptr::null();
         let found = unsafe { ffi::zvec_doc_get_string(self.ptr, field_c.as_ptr(), &mut value) };
         if found && !value.is_null() {
@@ -383,7 +396,7 @@ impl<'a> DocRef<'a> {
     }
 
     pub fn get_float(&self, field: &str) -> Option<f32> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: f32 = 0.0;
         let found = unsafe { ffi::zvec_doc_get_float(self.ptr, field_c.as_ptr(), &mut value) };
         if found {
@@ -394,7 +407,7 @@ impl<'a> DocRef<'a> {
     }
 
     pub fn get_int64(&self, field: &str) -> Option<i64> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: i64 = 0;
         let found = unsafe { ffi::zvec_doc_get_int64(self.ptr, field_c.as_ptr(), &mut value) };
         if found {
@@ -405,7 +418,7 @@ impl<'a> DocRef<'a> {
     }
 
     pub fn get_bool(&self, field: &str) -> Option<bool> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: bool = false;
         let found = unsafe { ffi::zvec_doc_get_bool(self.ptr, field_c.as_ptr(), &mut value) };
         if found {
@@ -416,7 +429,7 @@ impl<'a> DocRef<'a> {
     }
 
     pub fn get_int32(&self, field: &str) -> Option<i32> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: i32 = 0;
         let found = unsafe { ffi::zvec_doc_get_int32(self.ptr, field_c.as_ptr(), &mut value) };
         if found {
@@ -427,7 +440,7 @@ impl<'a> DocRef<'a> {
     }
 
     pub fn get_double(&self, field: &str) -> Option<f64> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut value: f64 = 0.0;
         let found = unsafe { ffi::zvec_doc_get_double(self.ptr, field_c.as_ptr(), &mut value) };
         if found {
@@ -438,7 +451,7 @@ impl<'a> DocRef<'a> {
     }
 
     pub fn get_vector(&self, field: &str) -> Option<Vec<f32>> {
-        let field_c = CString::new(field).unwrap();
+        let field_c = CString::new(field).expect("field name contains NUL byte");
         let mut buf = vec![0.0f32; 4096];
         let actual_len = unsafe {
             ffi::zvec_doc_get_vector_fp32(self.ptr, field_c.as_ptr(), buf.as_mut_ptr(), buf.len())

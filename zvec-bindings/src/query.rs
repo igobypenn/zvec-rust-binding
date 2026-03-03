@@ -63,7 +63,7 @@ pub struct VectorQuery {
 
 impl VectorQuery {
     pub fn new(field_name: &str) -> Self {
-        let field_c = CString::new(field_name).unwrap();
+        let field_c = CString::new(field_name).expect("field name contains NUL byte");
         let ptr = unsafe { ffi::zvec_vector_query_new(field_c.as_ptr()) };
         Self { ptr, id: None }
     }
@@ -74,7 +74,7 @@ impl VectorQuery {
     }
 
     pub fn filter(self, filter: &str) -> Self {
-        let filter_c = CString::new(filter).unwrap();
+        let filter_c = CString::new(filter).expect("filter contains NUL byte");
         unsafe { ffi::zvec_vector_query_set_filter(self.ptr, filter_c.as_ptr()) };
         self
     }
@@ -90,7 +90,10 @@ impl VectorQuery {
     }
 
     pub fn output_fields(self, fields: &[&str]) -> Self {
-        let fields_c: Vec<CString> = fields.iter().map(|f| CString::new(*f).unwrap()).collect();
+        let fields_c: Vec<CString> = fields
+            .iter()
+            .map(|f| CString::new(*f).expect("output field name contains NUL byte"))
+            .collect();
         let mut fields_ptr: Vec<*const std::os::raw::c_char> =
             fields_c.iter().map(|f| f.as_ptr()).collect();
         unsafe {
@@ -186,13 +189,13 @@ pub struct GroupByVectorQuery {
 
 impl GroupByVectorQuery {
     pub fn new(field_name: &str) -> Self {
-        let field_c = CString::new(field_name).unwrap();
+        let field_c = CString::new(field_name).expect("field name contains NUL byte");
         let ptr = unsafe { ffi::zvec_group_by_vector_query_new(field_c.as_ptr()) };
         Self { ptr }
     }
 
     pub fn group_by(self, field_name: &str) -> Self {
-        let field_c = CString::new(field_name).unwrap();
+        let field_c = CString::new(field_name).expect("field name contains NUL byte");
         unsafe { ffi::zvec_group_by_vector_query_set_group_by_field(self.ptr, field_c.as_ptr()) };
         self
     }
@@ -208,13 +211,16 @@ impl GroupByVectorQuery {
     }
 
     pub fn filter(self, filter: &str) -> Self {
-        let filter_c = CString::new(filter).unwrap();
+        let filter_c = CString::new(filter).expect("filter contains NUL byte");
         unsafe { ffi::zvec_group_by_vector_query_set_filter(self.ptr, filter_c.as_ptr()) };
         self
     }
 
     pub fn output_fields(self, fields: &[&str]) -> Self {
-        let fields_c: Vec<CString> = fields.iter().map(|f| CString::new(*f).unwrap()).collect();
+        let fields_c: Vec<CString> = fields
+            .iter()
+            .map(|f| CString::new(*f).expect("output field name contains NUL byte"))
+            .collect();
         let mut fields_ptr: Vec<*const std::os::raw::c_char> =
             fields_c.iter().map(|f| f.as_ptr()).collect();
         unsafe {

@@ -20,7 +20,7 @@
 //! # fn main() -> zvec_bindings::Result<()> {
 //! // Create schema with a vector field
 //! let mut schema = CollectionSchema::new("my_collection");
-//! schema.add_field(VectorSchema::fp32("embedding", 128).into())?;
+//! schema.add_field(VectorSchema::fp32("embedding", 128))?;
 //!
 //! // Create and open collection
 //! let collection = create_and_open("./my_db", schema)?;
@@ -57,7 +57,7 @@
 //! # fn main() -> zvec_bindings::Result<()> {
 //! # use zvec_bindings::{create_and_open, CollectionSchema, VectorSchema};
 //! # let mut schema = CollectionSchema::new("test");
-//! # schema.add_field(VectorSchema::fp32("embedding", 128).into())?;
+//! # schema.add_field(VectorSchema::fp32("embedding", 128))?;
 //! # let collection = create_and_open("./my_db", schema)?;
 //! // Create HNSW index
 //! let params = IndexParams::hnsw(16, 200, MetricType::L2, QuantizeType::Undefined);
@@ -81,7 +81,7 @@
 //! use zvec_bindings::{create_and_open_shared, SharedCollection, VectorQuery, VectorSchema, CollectionSchema, Doc};
 //!
 //! let mut schema = CollectionSchema::new("my_collection");
-//! schema.add_field(VectorSchema::fp32("embedding", 128).into())?;
+//! schema.add_field(VectorSchema::fp32("embedding", 128))?;
 //!
 //! let collection = create_and_open_shared("./my_db", schema)?;
 //!
@@ -124,7 +124,7 @@ pub use collection::Collection;
 pub use collection::CollectionStats;
 pub use collection::IndexParams;
 pub use doc::Doc;
-pub use error::{check_status, Error, Result, StatusCode};
+pub use error::{Error, Result, StatusCode};
 pub use query::{GroupByVectorQuery, HnswQueryParam, IVFQueryParam, VectorQuery};
 pub use rerank::{RrfReRanker, WeightedReRanker};
 pub use schema::{CollectionSchema, FieldSchema, VectorSchema};
@@ -174,4 +174,107 @@ pub fn create_and_open<P: AsRef<std::path::Path>>(
 
 pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Collection> {
     Collection::open(path)
+}
+
+/// Macro for creating documents with terse syntax.
+///
+/// This macro provides a convenient way to construct documents with
+/// primary keys and typed fields using a builder pattern.
+///
+/// **All forms return `Result<Doc>`.**
+///
+/// # Basic Usage
+///
+/// ```rust,no_run
+/// use zvec_bindings::{doc, field};
+///
+/// # fn main() -> zvec_bindings::Result<()> {
+/// // Create a document with primary key only
+/// let doc1 = doc!("doc_1")?;
+///
+/// // Create a document with primary key and vector field
+/// let doc2 = doc!("doc_2",
+///     field::vector("embedding", &[0.1, 0.2, 0.3, 0.4])
+/// )?;
+///
+/// // Create a document with multiple typed fields
+/// let doc3 = doc!("doc_3",
+///     field::vector("embedding", &[0.1, 0.2, 0.3, 0.4]),
+///     field::string("name", "example"),
+///     field::int64("count", 42)
+/// )?;
+/// # Ok(())
+/// # }
+/// ```
+#[macro_export]
+macro_rules! doc {
+    // Just primary key (returns Result<Doc>)
+    ($pk:expr) => {{
+        let mut doc = $crate::Doc::new();
+        doc.set_pk($pk)?;
+        ::std::result::Result::Ok::<_, $crate::Error>(doc)
+    }};
+
+    // Primary key with fields (returns Result<Doc>)
+    ($pk:expr, $($setter:expr),* $(,)?) => {{
+        let mut doc = $crate::Doc::new();
+        doc.set_pk($pk)?;
+        $($setter(&mut doc)?;)*
+        ::std::result::Result::Ok::<_, $crate::Error>(doc)
+    }};
+}
+
+/// Field setter helpers for use with the `doc!` macro.
+///
+/// These return closures that can be applied to a document.
+pub mod field {
+    use crate::doc::Doc;
+    use crate::error::Result;
+
+    /// Returns a closure that sets a dense vector field.
+    pub fn vector<'a>(
+        field: &'a str,
+        values: &'a [f32],
+    ) -> impl FnOnce(&mut Doc) -> Result<()> + 'a {
+        move |doc| doc.set_vector(field, values)
+    }
+
+    /// Returns a closure that sets a string field.
+    pub fn string<'a>(field: &'a str, value: &'a str) -> impl FnOnce(&mut Doc) -> Result<()> + 'a {
+        move |doc| doc.set_string(field, value)
+    }
+
+    /// Returns a closure that sets an int64 field.
+    pub fn int64(field: &str, value: i64) -> impl FnOnce(&mut Doc) -> Result<()> + '_ {
+        move |doc| doc.set_int64(field, value)
+    }
+
+    /// Returns a closure that sets a float field.
+    pub fn float(field: &str, value: f32) -> impl FnOnce(&mut Doc) -> Result<()> + '_ {
+        move |doc| doc.set_float(field, value)
+    }
+
+    /// Returns a closure that sets a boolean field.
+    pub fn boolean(field: &str, value: bool) -> impl FnOnce(&mut Doc) -> Result<()> + '_ {
+        move |doc| doc.set_bool(field, value)
+    }
+
+    /// Returns a closure that sets a double field.
+    pub fn double(field: &str, value: f64) -> impl FnOnce(&mut Doc) -> Result<()> + '_ {
+        move |doc| doc.set_double(field, value)
+    }
+
+    /// Returns a closure that sets an int32 field.
+    pub fn int32(field: &str, value: i32) -> impl FnOnce(&mut Doc) -> Result<()> + '_ {
+        move |doc| doc.set_int32(field, value)
+    }
+
+    /// Returns a closure that sets a sparse vector field.
+    pub fn sparse_vector<'a>(
+        field: &'a str,
+        indices: &'a [u32],
+        values: &'a [f32],
+    ) -> impl FnOnce(&mut Doc) -> Result<()> + 'a {
+        move |doc| doc.set_sparse_vector(field, indices, values)
+    }
 }

@@ -7,7 +7,10 @@ fn main() -> zvec_bindings::Result<()> {
     let _ = fs::remove_dir_all(path);
 
     let mut schema = CollectionSchema::new("sparse_example");
-    schema.add_field(VectorSchema::sparse_fp32_with_dim("sparse_embedding", 10000).into())?;
+    schema.add_field(VectorSchema::sparse_fp32_with_dim(
+        "sparse_embedding",
+        10000,
+    ))?;
 
     let collection = create_and_open(path, schema)?;
 

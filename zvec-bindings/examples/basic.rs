@@ -4,7 +4,7 @@ fn main() -> zvec_bindings::Result<()> {
     let path = "./zvec_example_db";
 
     let mut schema = CollectionSchema::new("example");
-    schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+    schema.add_field(VectorSchema::fp32("embedding", 4))?;
 
     let collection = create_and_open(path, schema)?;
 

@@ -11,7 +11,7 @@ fn tempdir() -> zvec_bindings::Result<TempDir> {
 
 fn create_collection(path: &std::path::Path) -> zvec_bindings::Result<Collection> {
     let mut schema = CollectionSchema::new("test");
-    schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+    schema.add_field(VectorSchema::fp32("embedding", 4))?;
     create_and_open(path, schema)
 }
 
@@ -121,7 +121,7 @@ mod coverage_tests {
     #[test]
     fn test_doc_builder_chaining() -> zvec_bindings::Result<()> {
         let doc = Doc::id("test")
-            .with_pk_mut("updated_pk")
+            .with_pk_mut("updated_pk")?
             .with_vector("embedding", &[1.0, 0.0, 0.0, 0.0])?
             .with_string("name", "test_name")?
             .with_float("score", 1.5)?
@@ -415,7 +415,7 @@ mod coverage_tests {
         let path = dir.path().join("test_db");
 
         let mut schema = CollectionSchema::new("test");
-        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding", 4))?;
         schema.add_field(FieldSchema::int64("count"))?;
         schema.add_field(FieldSchema::float("score"))?;
         let collection = create_and_open(&path, schema)?;
@@ -545,7 +545,7 @@ mod coverage_tests {
         let path = dir.path().join("test_db");
 
         let mut schema = CollectionSchema::new("test");
-        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding", 4))?;
         schema.add_field(FieldSchema::bool_("bool_field"))?;
         schema.add_field(FieldSchema::int32("int32_field"))?;
         schema.add_field(FieldSchema::int64("int64_field"))?;
@@ -813,7 +813,7 @@ mod coverage_tests {
         let path = dir.path().join("test_db");
 
         let mut schema = CollectionSchema::new("test");
-        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding", 4))?;
         schema.add_field(FieldSchema::int64("count"))?;
         schema.add_field(FieldSchema::string("name"))?;
         let collection = create_and_open(&path, schema)?;
@@ -831,8 +831,8 @@ mod coverage_tests {
         let path = dir.path().join("test_db");
 
         let mut schema = CollectionSchema::new("test");
-        schema.add_field(VectorSchema::fp32("embedding_a", 4).into())?;
-        schema.add_field(VectorSchema::fp32("embedding_b", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding_a", 4))?;
+        schema.add_field(VectorSchema::fp32("embedding_b", 4))?;
         schema.add_field(FieldSchema::int64("count"))?;
         let collection = create_and_open(&path, schema)?;
 
@@ -851,7 +851,7 @@ mod coverage_tests {
         let path = dir.path().join("test_db");
 
         let mut schema = CollectionSchema::new("test");
-        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding", 4))?;
         schema.add_field(FieldSchema::bool_("active"))?;
         let collection = create_and_open(&path, schema)?;
 
@@ -874,7 +874,7 @@ mod coverage_tests {
         let path = dir.path().join("test_db");
 
         let mut schema = CollectionSchema::new("test");
-        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding", 4))?;
         schema.add_field(FieldSchema::int32("value"))?;
         let collection = create_and_open(&path, schema)?;
 
@@ -897,7 +897,7 @@ mod coverage_tests {
         let path = dir.path().join("test_db");
 
         let mut schema = CollectionSchema::new("test");
-        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding", 4))?;
         schema.add_field(FieldSchema::double("precise_value"))?;
         let collection = create_and_open(&path, schema)?;
 
@@ -990,7 +990,7 @@ mod sync_tests {
 
     fn create_shared_collection(path: &std::path::Path) -> zvec_bindings::Result<SharedCollection> {
         let mut schema = CollectionSchema::new("test");
-        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding", 4))?;
         create_and_open_shared(path, schema)
     }
 
@@ -1016,7 +1016,7 @@ mod sync_tests {
         let path = dir.path().join("test_db");
 
         let mut schema = CollectionSchema::new("test");
-        schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+        schema.add_field(VectorSchema::fp32("embedding", 4))?;
         let collection = create_and_open(&path, schema)?;
 
         let shared = SharedCollection::new(collection);

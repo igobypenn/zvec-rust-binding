@@ -11,13 +11,13 @@ pub struct FieldSchema {
 
 impl FieldSchema {
     pub fn new(name: &str, data_type: DataType) -> Self {
-        let name_c = CString::new(name).unwrap();
+        let name_c = CString::new(name).expect("name contains NUL byte");
         let ptr = unsafe { ffi::zvec_field_schema_new(name_c.as_ptr(), data_type.into()) };
         Self { ptr, owned: true }
     }
 
     pub fn new_vector(name: &str, data_type: DataType, dimension: u32) -> Self {
-        let name_c = CString::new(name).unwrap();
+        let name_c = CString::new(name).expect("name contains NUL byte");
         let ptr = unsafe {
             ffi::zvec_field_schema_new_with_dimension(name_c.as_ptr(), data_type.into(), dimension)
         };
@@ -91,7 +91,7 @@ pub struct CollectionSchema {
 
 impl CollectionSchema {
     pub fn new(name: &str) -> Self {
-        let name_c = CString::new(name).unwrap();
+        let name_c = CString::new(name).expect("name contains NUL byte");
         let ptr = unsafe { ffi::zvec_collection_schema_new(name_c.as_ptr()) };
         Self { ptr, owned: true }
     }
@@ -100,7 +100,22 @@ impl CollectionSchema {
         Self { ptr, owned: false }
     }
 
-    pub fn add_field(&mut self, field: FieldSchema) -> Result<()> {
+    /// Add a field to the collection schema.
+    ///
+    /// Accepts either `FieldSchema` or `VectorSchema` (conversion is automatic).
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use zvec_bindings::{CollectionSchema, VectorSchema};
+    ///
+    /// let mut schema = CollectionSchema::new("my_collection");
+    /// // No .into() needed - VectorSchema converts automatically
+    /// schema.add_field(VectorSchema::fp32("embedding", 128))?;
+    /// # Ok::<(), zvec_bindings::Error>(())
+    /// ```
+    pub fn add_field(&mut self, field: impl Into<FieldSchema>) -> Result<()> {
+        let field = field.into();
         let status = unsafe { ffi::zvec_collection_schema_add_field(self.ptr, field.ptr) };
         check_status(status)
     }

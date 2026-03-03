@@ -38,22 +38,22 @@ zvec-bindings = "0.2.1"
 use zvec_bindings::{create_and_open, CollectionSchema, Doc, VectorQuery, VectorSchema};
 
 fn main() -> zvec_bindings::Result<()> {
-    // Create schema with a vector field
+    // Create schema with a vector field (no .into() needed)
     let mut schema = CollectionSchema::new("example");
-    schema.add_field(VectorSchema::fp32("embedding", 128).into())?;
+    schema.add_field(VectorSchema::fp32("embedding", 128))?;
     
     // Create and open collection
     let collection = create_and_open("./my_vectors", schema)?;
     
-    // Insert documents
-    let mut doc = Doc::id("doc_1");
-    doc.set_vector("embedding", &[0.1, 0.2, 0.3, /* ... */])?;
-    collection.insert(&[doc])?;
+    // Insert a document using builder pattern
+    let doc = Doc::with_pk("doc_1")
+        .with_vector("embedding", &[0.1, 0.2, 0.3, 0.4])?;
+    collection.insert_one(doc)?;
     
     // Search
     let query = VectorQuery::new("embedding")
         .topk(10)
-        .vector(&[0.4, 0.3, 0.2, /* ... */])?;
+        .vector(&[0.4, 0.3, 0.2, 0.1])?;
     
     let results = collection.query(query)?;
     for doc in results.iter() {
@@ -62,6 +62,25 @@ fn main() -> zvec_bindings::Result<()> {
     
     Ok(())
 }
+```
+
+### Terse Document Construction with `doc!` Macro
+
+```rust
+use zvec_bindings::{doc, field};
+
+# fn main() -> zvec_bindings::Result<()> {
+// All forms return Result<Doc>
+let doc1 = doc!("doc_1")?;
+
+// With fields
+let doc2 = doc!("doc_2",
+    field::vector("embedding", &[0.1, 0.2, 0.3, 0.4]),
+    field::string("name", "example"),
+    field::int64("count", 42)
+)?;
+# Ok(())
+# }
 ```
 
 ### Thread-Safe Usage (Feature: `sync`)

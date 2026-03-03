@@ -7,7 +7,7 @@ fn main() -> zvec_bindings::Result<()> {
     let _ = fs::remove_dir_all(path);
 
     let mut schema = CollectionSchema::new("search_example");
-    schema.add_field(VectorSchema::fp32("embedding", 4).into())?;
+    schema.add_field(VectorSchema::fp32("embedding", 4))?;
 
     let collection = create_and_open(path, schema)?;
 

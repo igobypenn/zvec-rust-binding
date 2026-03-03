@@ -41,7 +41,7 @@ impl CollectionStats {
 ///
 /// # fn main() -> zvec_bindings::Result<()> {
 /// let mut schema = CollectionSchema::new("my_collection");
-/// schema.add_field(VectorSchema::fp32("embedding", 128).into())?;
+/// schema.add_field(VectorSchema::fp32("embedding", 128))?;
 ///
 /// let collection = create_and_open("./my_db", schema)?;
 ///
@@ -63,7 +63,7 @@ pub struct Collection {
 impl Collection {
     pub fn create_and_open<P: AsRef<Path>>(path: P, schema: CollectionSchema) -> Result<Self> {
         let path_str = path.as_ref().to_string_lossy().into_owned();
-        let path_c = CString::new(path_str).unwrap();
+        let path_c = CString::new(path_str).expect("path contains NUL byte");
 
         let mut status: ffi::zvec_status_t = unsafe { std::mem::zeroed() };
         let ptr = unsafe {
@@ -88,7 +88,7 @@ impl Collection {
 
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_str = path.as_ref().to_string_lossy().into_owned();
-        let path_c = CString::new(path_str).unwrap();
+        let path_c = CString::new(path_str).expect("path contains NUL byte");
 
         let mut status: ffi::zvec_status_t = unsafe { std::mem::zeroed() };
         let ptr =
@@ -142,6 +142,22 @@ impl Collection {
         Ok(WriteResults { inner: results })
     }
 
+    /// Upsert a single document into the collection.
+    ///
+    /// This is a convenience method for upserting one document.
+    /// See [`upsert`] for batch operations.
+    pub fn upsert_one(&self, doc: Doc) -> Result<WriteResults> {
+        self.upsert(&[doc])
+    }
+
+    /// Insert a single document into the collection.
+    ///
+    /// This is a convenience method for inserting one document.
+    /// See [`insert`] for batch operations.
+    pub fn insert_one(&self, doc: Doc) -> Result<WriteResults> {
+        self.insert(&[doc])
+    }
+
     /// Upsert documents into the collection.
     ///
     /// If a document with the same primary key exists, it will be updated.
@@ -183,9 +199,20 @@ impl Collection {
         Ok(WriteResults { inner: results })
     }
 
+    /// Update a single document in the collection.
+    ///
+    /// This is a convenience method for updating one document.
+    /// See [`update`] for batch operations.
+    pub fn update_one(&self, doc: Doc) -> Result<WriteResults> {
+        self.update(&[doc])
+    }
+
     /// Delete documents by primary key.
     pub fn delete(&self, pks: &[&str]) -> Result<WriteResults> {
-        let pk_cstrings: Vec<CString> = pks.iter().map(|pk| CString::new(*pk).unwrap()).collect();
+        let pk_cstrings: Vec<CString> = pks
+            .iter()
+            .map(|pk| CString::new(*pk).expect("primary key contains NUL byte"))
+            .collect();
         let mut pk_ptrs: Vec<*const std::os::raw::c_char> =
             pk_cstrings.iter().map(|pk| pk.as_ptr()).collect();
         let mut results: ffi::zvec_write_results_t = unsafe { std::mem::zeroed() };
@@ -198,9 +225,17 @@ impl Collection {
         Ok(WriteResults { inner: results })
     }
 
+    /// Delete a single document by primary key.
+    ///
+    /// This is a convenience method for deleting one document.
+    /// See [`delete`] for batch operations.
+    pub fn delete_one(&self, pk: &str) -> Result<WriteResults> {
+        self.delete(&[pk])
+    }
+
     /// Delete documents matching a filter expression.
     pub fn delete_by_filter(&self, filter: &str) -> Result<()> {
-        let filter_c = CString::new(filter).unwrap();
+        let filter_c = CString::new(filter).expect("filter expression contains NUL byte");
         let status = unsafe { ffi::zvec_collection_delete_by_filter(self.ptr, filter_c.as_ptr()) };
         check_status(status)
     }
@@ -230,7 +265,10 @@ impl Collection {
     ///
     /// Returns a [`DocMap`] mapping primary keys to documents.
     pub fn fetch(&self, pks: &[&str]) -> Result<DocMap> {
-        let pk_cstrings: Vec<CString> = pks.iter().map(|pk| CString::new(*pk).unwrap()).collect();
+        let pk_cstrings: Vec<CString> = pks
+            .iter()
+            .map(|pk| CString::new(*pk).expect("primary key contains NUL byte"))
+            .collect();
         let mut pk_ptrs: Vec<*const std::os::raw::c_char> =
             pk_cstrings.iter().map(|pk| pk.as_ptr()).collect();
         let mut results: ffi::zvec_doc_map_t = unsafe { std::mem::zeroed() };
@@ -250,7 +288,7 @@ impl Collection {
     /// * `column_name` - Name of the vector field to index
     /// * `params` - Index parameters (HNSW, IVF, FLAT, etc.)
     pub fn create_index(&self, column_name: &str, params: IndexParams) -> Result<()> {
-        let column_c = CString::new(column_name).unwrap();
+        let column_c = CString::new(column_name).expect("column name contains NUL byte");
         let status = unsafe {
             ffi::zvec_collection_create_index(
                 self.ptr,
@@ -264,7 +302,7 @@ impl Collection {
 
     /// Drop an index from a column.
     pub fn drop_index(&self, column_name: &str) -> Result<()> {
-        let column_c = CString::new(column_name).unwrap();
+        let column_c = CString::new(column_name).expect("column name contains NUL byte");
         let status = unsafe { ffi::zvec_collection_drop_index(self.ptr, column_c.as_ptr()) };
         check_status(status)
     }
@@ -332,7 +370,7 @@ impl Collection {
 
     /// Add a new column to the collection.
     pub fn add_column(&self, column_schema: FieldSchema, expression: Option<&str>) -> Result<()> {
-        let expr_c = expression.map(|e| CString::new(e).unwrap());
+        let expr_c = expression.map(|e| CString::new(e).expect("expression contains NUL byte"));
         let expr_ptr = expr_c.as_ref().map(|e| e.as_ptr()).unwrap_or(ptr::null());
         let status =
             unsafe { ffi::zvec_collection_add_column(self.ptr, column_schema.ptr, expr_ptr) };
@@ -341,7 +379,7 @@ impl Collection {
 
     /// Drop a column from the collection.
     pub fn drop_column(&self, column_name: &str) -> Result<()> {
-        let column_c = CString::new(column_name).unwrap();
+        let column_c = CString::new(column_name).expect("column name contains NUL byte");
         let status = unsafe { ffi::zvec_collection_drop_column(self.ptr, column_c.as_ptr()) };
         check_status(status)
     }
@@ -353,13 +391,13 @@ impl Collection {
         rename: Option<&str>,
         new_column_schema: Option<FieldSchema>,
     ) -> Result<()> {
-        let rename_c = rename.map(|r| CString::new(r).unwrap());
+        let rename_c = rename.map(|r| CString::new(r).expect("rename contains NUL byte"));
         let rename_ptr = rename_c.as_ref().map(|r| r.as_ptr()).unwrap_or(ptr::null());
         let new_schema_ptr = new_column_schema
             .as_ref()
             .map(|s| s.ptr)
             .unwrap_or(ptr::null_mut());
-        let column_c = CString::new(column_name).unwrap();
+        let column_c = CString::new(column_name).expect("column name contains NUL byte");
         let status = unsafe {
             ffi::zvec_collection_alter_column(
                 self.ptr,
