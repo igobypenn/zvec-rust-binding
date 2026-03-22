@@ -94,7 +94,7 @@ Additional environment variables for customizing the build:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ZVEC_GIT_REF` | `v0.2.0` | zvec version to download (tag or branch) |
+| `ZVEC_GIT_REF` | `v0.2.1` | zvec version to download (tag or branch) |
 | `ZVEC_BUILD_TYPE` | `Release` | CMake build type |
 | `ZVEC_BUILD_PARALLEL` | CPU count | Parallel make jobs |
 | `ZVEC_CPU_ARCH` | auto | CPU architecture optimization |
@@ -106,7 +106,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zvec-bindings = "0.3"
+zvec-bindings = "0.3.1"
 ```
 
 ### Basic Example

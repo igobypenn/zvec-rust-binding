@@ -233,7 +233,6 @@ zvec_status_t zvec_collection_add_column(
     
     zvec::AddColumnOptions opts;
     auto status = collection->ptr->AddColumn(
-        column_schema->ptr->name(),
         column_schema->ptr,
         std::string(expression),
         opts

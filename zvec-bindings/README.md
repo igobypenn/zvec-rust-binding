@@ -20,7 +20,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zvec-bindings = "0.3"
+zvec-bindings = "0.3.1"
 ```
 
 ### Prerequisites
@@ -89,7 +89,7 @@ For multi-threaded applications, enable the `sync` feature:
 
 ```toml
 [dependencies]
-zvec-bindings = { version = "0.1", features = ["sync"] }
+zvec-bindings = { version = "0.3.1", features = ["sync"] }
 ```
 
 ## Feature Flags
