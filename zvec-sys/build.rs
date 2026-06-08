@@ -355,8 +355,16 @@ fn link_libraries(zvec_lib: &Path, wrapper_build: &Path) {
         println!("cargo:rustc-link-lib=static:+whole-archive={}", lib);
     }
 
-    // System libraries
+    // Boost.Locale pulls ICU symbols on Linux, but its static archive does not
+    // carry transitive link metadata into downstream Rust test binaries.
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "linux" {
+        println!("cargo:rustc-link-lib=icui18n");
+        println!("cargo:rustc-link-lib=icuuc");
+        println!("cargo:rustc-link-lib=icudata");
+    }
+
+    // System libraries
     if target_os == "macos" {
         println!("cargo:rustc-link-lib=c++");
     } else {
