@@ -5,9 +5,7 @@
 
 use std::fs;
 
-use zvec_bindings::{
-    create_and_open, CollectionSchema, Doc, MultiQuery, SubQuery, VectorSchema,
-};
+use zvec_bindings::{create_and_open, CollectionSchema, Doc, MultiQuery, SubQuery, VectorSchema};
 
 fn main() -> zvec_bindings::Result<()> {
     let path = "./zvec_hybrid_example_db";

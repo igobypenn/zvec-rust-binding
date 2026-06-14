@@ -152,13 +152,12 @@ fn build_zvec(_src: &Path, build: &Path, build_type: &str, parallel_jobs: usize)
     );
 
     run(
-        Command::new("cmake")
-            .args([
-                "--build",
-                build.to_str().expect("Invalid build path"),
-                "-j",
-                parallel_jobs.to_string().as_str(),
-            ]),
+        Command::new("cmake").args([
+            "--build",
+            build.to_str().expect("Invalid build path"),
+            "-j",
+            parallel_jobs.to_string().as_str(),
+        ]),
         "build zvec",
     );
 }
@@ -188,13 +187,12 @@ fn build_c_api_static(
     );
 
     run(
-        Command::new("cmake")
-            .args([
-                "--build",
-                build.to_str().expect("Invalid c-api-static build path"),
-                "-j",
-                parallel_jobs.to_string().as_str(),
-            ]),
+        Command::new("cmake").args([
+            "--build",
+            build.to_str().expect("Invalid c-api-static build path"),
+            "-j",
+            parallel_jobs.to_string().as_str(),
+        ]),
         "build zvec_c_api_static",
     );
 }
@@ -221,13 +219,12 @@ fn build_groupby_shim(
     );
 
     run(
-        Command::new("cmake")
-            .args([
-                "--build",
-                build.to_str().expect("Invalid groupby-shim build path"),
-                "-j",
-                parallel_jobs.to_string().as_str(),
-            ]),
+        Command::new("cmake").args([
+            "--build",
+            build.to_str().expect("Invalid groupby-shim build path"),
+            "-j",
+            parallel_jobs.to_string().as_str(),
+        ]),
         "build zvec_groupby_shim",
     );
 }
@@ -265,7 +262,11 @@ fn generate_bindings(zvec_src: &Path, zvec_build: &Path, groupby_shim_dir: &Path
     .expect("Failed to write wrapper.h");
 
     let mut builder = bindgen::Builder::default()
-        .header(wrapper_header.to_str().expect("Invalid wrapper header path"))
+        .header(
+            wrapper_header
+                .to_str()
+                .expect("Invalid wrapper header path"),
+        )
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate_comments(true)
         .allowlist_function("zvec_.*")
@@ -277,10 +278,7 @@ fn generate_bindings(zvec_src: &Path, zvec_build: &Path, groupby_shim_dir: &Path
         .default_macro_constant_type(bindgen::MacroTypeVariation::Signed)
         .clang_arg(format!("-I{}", zvec_build.join("src/generated").display()))
         .clang_arg(format!("-I{}", zvec_src.join("src/include").display()))
-        .clang_arg(format!(
-            "-I{}",
-            groupby_shim_dir.join("include").display()
-        ));
+        .clang_arg(format!("-I{}", groupby_shim_dir.join("include").display()));
 
     // Best-effort system include paths (only add if they exist on this machine).
     for path in ["/usr/include", "/usr/local/include"] {
@@ -308,10 +306,7 @@ fn generate_bindings(zvec_src: &Path, zvec_build: &Path, groupby_shim_dir: &Path
 
 fn link_libraries(zvec_lib: &Path, c_api_build: &Path, groupby_shim_build: &Path) {
     // Static archive of upstream c_api.cc (compiled by our overlay)
-    println!(
-        "cargo:rustc-link-search=native={}",
-        c_api_build.display()
-    );
+    println!("cargo:rustc-link-search=native={}", c_api_build.display());
     println!("cargo:rustc-link-lib=static:+whole-archive=zvec_c_api_static");
 
     // Group-by shim

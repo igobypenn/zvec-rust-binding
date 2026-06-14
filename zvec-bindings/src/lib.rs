@@ -131,8 +131,8 @@ pub use error::{Error, Result, StatusCode};
 pub use fts::Fts;
 pub use multi_query::{MultiQuery, SubQuery};
 pub use query::{
-    FlatQueryParam, FtsQueryParam, GroupByVectorQuery, HnswQueryParam, IVFQueryParam,
-    QueryParam, VectorQuery,
+    FlatQueryParam, FtsQueryParam, GroupByVectorQuery, HnswQueryParam, IVFQueryParam, QueryParam,
+    VectorQuery,
 };
 pub use rerank::{RrfReRanker, WeightedReRanker};
 pub use schema::{CollectionSchema, FieldSchema, VectorSchema};
@@ -176,9 +176,7 @@ pub fn version() -> String {
         if ptr.is_null() {
             return String::new();
         }
-        std::ffi::CStr::from_ptr(ptr)
-            .to_string_lossy()
-            .into_owned()
+        std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
     }
 }
 
@@ -216,7 +214,10 @@ pub fn set_default_jieba_dict_dir(path: Option<&str>) {
         }
         _ => None,
     };
-    let ptr = cstr.as_ref().map(|c| c.as_ptr()).unwrap_or(std::ptr::null());
+    let ptr = cstr
+        .as_ref()
+        .map(|c| c.as_ptr())
+        .unwrap_or(std::ptr::null());
     unsafe { ffi::zvec_set_default_jieba_dict_dir(ptr) };
 }
 
@@ -339,8 +340,7 @@ impl LogConfig {
         }
 
         let mut overall: Result<()> = Ok(());
-        let set_code =
-            unsafe { ffi::zvec_config_data_set_log_config(config_data, log_config) };
+        let set_code = unsafe { ffi::zvec_config_data_set_log_config(config_data, log_config) };
         if let Err(e) = crate::error::check_error(set_code as c_int) {
             overall = Err(e);
         } else {

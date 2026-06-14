@@ -4,9 +4,7 @@
 //! via a tiny static shim (zvec-sys/groupby-shim/) that wraps
 //! zvec::Collection::GroupByQuery directly.
 
-use zvec_bindings::{
-    create_and_open, CollectionSchema, Doc, GroupByVectorQuery, VectorSchema,
-};
+use zvec_bindings::{create_and_open, CollectionSchema, Doc, GroupByVectorQuery, VectorSchema};
 
 fn main() -> zvec_bindings::Result<()> {
     let dir = std::path::Path::new("./zvec_example_db_groupby");

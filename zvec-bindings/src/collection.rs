@@ -123,8 +123,7 @@ impl Collection {
             .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
 
         let mut handle: *mut ffi::zvec_collection_t = ptr::null_mut();
-        let code =
-            unsafe { ffi::zvec_collection_open(path_c.as_ptr(), ptr::null(), &mut handle) };
+        let code = unsafe { ffi::zvec_collection_open(path_c.as_ptr(), ptr::null(), &mut handle) };
         check_error(code as c_int)?;
 
         if handle.is_null() {
@@ -152,8 +151,10 @@ impl Collection {
     /// Returns a [`WriteResults`] indicating the success or failure of each
     /// insert (uses the per-document `_with_results` upstream variant).
     pub fn insert(&self, docs: &[Doc]) -> Result<WriteResults> {
-        let doc_ptrs: Vec<*const ffi::zvec_doc_t> =
-            docs.iter().map(|d| d.ptr as *const ffi::zvec_doc_t).collect();
+        let doc_ptrs: Vec<*const ffi::zvec_doc_t> = docs
+            .iter()
+            .map(|d| d.ptr as *const ffi::zvec_doc_t)
+            .collect();
         let mut results: *mut ffi::zvec_write_result_t = ptr::null_mut();
         let mut result_count: usize = 0;
         let code = unsafe {
@@ -174,8 +175,10 @@ impl Collection {
     /// This is lighter-weight than [`insert`] when per-document status is not
     /// needed.
     pub fn insert_counted(&self, docs: &[Doc]) -> Result<(usize, usize)> {
-        let doc_ptrs: Vec<*const ffi::zvec_doc_t> =
-            docs.iter().map(|d| d.ptr as *const ffi::zvec_doc_t).collect();
+        let doc_ptrs: Vec<*const ffi::zvec_doc_t> = docs
+            .iter()
+            .map(|d| d.ptr as *const ffi::zvec_doc_t)
+            .collect();
         let mut success: usize = 0;
         let mut errors: usize = 0;
         let code = unsafe {
@@ -212,8 +215,10 @@ impl Collection {
     /// If a document with the same primary key exists, it will be updated.
     /// Otherwise, it will be inserted.
     pub fn upsert(&self, docs: &[Doc]) -> Result<WriteResults> {
-        let doc_ptrs: Vec<*const ffi::zvec_doc_t> =
-            docs.iter().map(|d| d.ptr as *const ffi::zvec_doc_t).collect();
+        let doc_ptrs: Vec<*const ffi::zvec_doc_t> = docs
+            .iter()
+            .map(|d| d.ptr as *const ffi::zvec_doc_t)
+            .collect();
         let mut results: *mut ffi::zvec_write_result_t = ptr::null_mut();
         let mut result_count: usize = 0;
         let code = unsafe {
@@ -233,8 +238,10 @@ impl Collection {
     ///
     /// Documents must already exist in the collection.
     pub fn update(&self, docs: &[Doc]) -> Result<WriteResults> {
-        let doc_ptrs: Vec<*const ffi::zvec_doc_t> =
-            docs.iter().map(|d| d.ptr as *const ffi::zvec_doc_t).collect();
+        let doc_ptrs: Vec<*const ffi::zvec_doc_t> = docs
+            .iter()
+            .map(|d| d.ptr as *const ffi::zvec_doc_t)
+            .collect();
         let mut results: *mut ffi::zvec_write_result_t = ptr::null_mut();
         let mut result_count: usize = 0;
         let code = unsafe {
@@ -375,9 +382,8 @@ impl Collection {
     /// * `params` - Index parameters (HNSW, IVF, FLAT, etc.)
     pub fn create_index(&self, column_name: &str, params: IndexParams) -> Result<()> {
         let column_c = CString::new(column_name).expect("column name contains NUL byte");
-        let code = unsafe {
-            ffi::zvec_collection_create_index(self.ptr, column_c.as_ptr(), params.ptr)
-        };
+        let code =
+            unsafe { ffi::zvec_collection_create_index(self.ptr, column_c.as_ptr(), params.ptr) };
         check_error(code as c_int)
     }
 
@@ -434,9 +440,8 @@ impl Collection {
     pub fn add_column(&self, column_schema: FieldSchema, expression: Option<&str>) -> Result<()> {
         let expr_c = expression.map(|e| CString::new(e).expect("expression contains NUL byte"));
         let expr_ptr = expr_c.as_ref().map(|e| e.as_ptr()).unwrap_or(ptr::null());
-        let code = unsafe {
-            ffi::zvec_collection_add_column(self.ptr, column_schema.ptr, expr_ptr)
-        };
+        let code =
+            unsafe { ffi::zvec_collection_add_column(self.ptr, column_schema.ptr, expr_ptr) };
         check_error(code as c_int)
     }
 
@@ -535,9 +540,10 @@ impl IndexParams {
             let _ = check_error(unsafe {
                 ffi::zvec_index_params_set_hnsw_params(ptr, m, ef_construction)
             } as c_int);
-            let _ = check_error(unsafe {
-                ffi::zvec_index_params_set_metric_type(ptr, metric.into())
-            } as c_int);
+            let _ =
+                check_error(
+                    unsafe { ffi::zvec_index_params_set_metric_type(ptr, metric.into()) } as c_int,
+                );
             let _ = check_error(unsafe {
                 ffi::zvec_index_params_set_quantize_type(ptr, quantize.into())
             } as c_int);
@@ -564,9 +570,10 @@ impl IndexParams {
             let _ = check_error(unsafe {
                 ffi::zvec_index_params_set_ivf_params(ptr, n_list, n_iters, use_soar)
             } as c_int);
-            let _ = check_error(unsafe {
-                ffi::zvec_index_params_set_metric_type(ptr, metric.into())
-            } as c_int);
+            let _ =
+                check_error(
+                    unsafe { ffi::zvec_index_params_set_metric_type(ptr, metric.into()) } as c_int,
+                );
             let _ = check_error(unsafe {
                 ffi::zvec_index_params_set_quantize_type(ptr, quantize.into())
             } as c_int);
@@ -581,9 +588,10 @@ impl IndexParams {
     /// * `quantize` - Quantization type
     pub fn flat(metric: MetricType, quantize: QuantizeType) -> Self {
         Self::build(crate::types::IndexType::Flat, |ptr| {
-            let _ = check_error(unsafe {
-                ffi::zvec_index_params_set_metric_type(ptr, metric.into())
-            } as c_int);
+            let _ =
+                check_error(
+                    unsafe { ffi::zvec_index_params_set_metric_type(ptr, metric.into()) } as c_int,
+                );
             let _ = check_error(unsafe {
                 ffi::zvec_index_params_set_quantize_type(ptr, quantize.into())
             } as c_int);
@@ -624,9 +632,7 @@ impl IndexParams {
         filters: Option<&[&str]>,
         extra_params: Option<&str>,
     ) -> Result<Self> {
-        let ptr = unsafe {
-            ffi::zvec_index_params_create(crate::types::IndexType::Fts.into())
-        };
+        let ptr = unsafe { ffi::zvec_index_params_create(crate::types::IndexType::Fts.into()) };
         if ptr.is_null() {
             return Err(crate::error::Error::InternalError(
                 "zvec_index_params_create returned null".into(),
@@ -637,12 +643,14 @@ impl IndexParams {
             .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
         let extra_c = match extra_params {
             Some(s) => Some(
-                CString::new(s)
-                    .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?,
+                CString::new(s).map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?,
             ),
             None => None,
         };
-        let extra_ptr = extra_c.as_ref().map(|c| c.as_ptr()).unwrap_or(std::ptr::null());
+        let extra_ptr = extra_c
+            .as_ref()
+            .map(|c| c.as_ptr())
+            .unwrap_or(std::ptr::null());
 
         // Build the optional filters string array. If `filters` is None
         // or empty we pass a null pointer (upstream keeps current value).
@@ -726,24 +734,28 @@ impl CollectionOptions {
     }
 
     pub fn read_only(self, read_only: bool) -> Self {
-        let _ = check_error(unsafe {
-            ffi::zvec_collection_options_set_read_only(self.ptr, read_only)
-        } as c_int);
+        let _ =
+            check_error(
+                unsafe { ffi::zvec_collection_options_set_read_only(self.ptr, read_only) } as c_int,
+            );
         self
     }
 
     pub fn enable_mmap(self, enable: bool) -> Self {
-        let _ = check_error(unsafe {
-            ffi::zvec_collection_options_set_enable_mmap(self.ptr, enable)
-        } as c_int);
+        let _ =
+            check_error(
+                unsafe { ffi::zvec_collection_options_set_enable_mmap(self.ptr, enable) } as c_int,
+            );
         self
     }
 
     /// Set the maximum write buffer size in bytes.
     pub fn max_buffer_size(self, size: usize) -> Self {
-        let _ = check_error(unsafe {
-            ffi::zvec_collection_options_set_max_buffer_size(self.ptr, size)
-        } as c_int);
+        let _ =
+            check_error(
+                unsafe { ffi::zvec_collection_options_set_max_buffer_size(self.ptr, size) }
+                    as c_int,
+            );
         self
     }
 }

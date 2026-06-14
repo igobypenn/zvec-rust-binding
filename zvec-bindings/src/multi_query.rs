@@ -29,8 +29,8 @@ impl SubQuery {
     /// Set the target field name (vector field or FTS-indexed string
     /// field).
     pub fn field_name(self, name: &str) -> Result<Self> {
-        let cstr = CString::new(name)
-            .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
+        let cstr =
+            CString::new(name).map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
         let code = unsafe { ffi::zvec_sub_query_set_field_name(self.ptr, cstr.as_ptr()) };
         check_error(code as c_int)?;
         Ok(self)
@@ -39,8 +39,7 @@ impl SubQuery {
     /// Set the candidate pool size retrieved from this sub-query before
     /// reranking. Larger values improve recall at the cost of latency.
     pub fn num_candidates(self, n: u32) -> Self {
-        let code =
-            unsafe { ffi::zvec_sub_query_set_num_candidates(self.ptr, n as c_int) };
+        let code = unsafe { ffi::zvec_sub_query_set_num_candidates(self.ptr, n as c_int) };
         let _ = check_error(code as c_int);
         self
     }
@@ -70,13 +69,9 @@ impl SubQuery {
             ));
         }
         let n = indices.len();
-        let code = unsafe {
-            ffi::zvec_sub_query_set_sparse_indices(self.ptr, indices.as_ptr(), n)
-        };
+        let code = unsafe { ffi::zvec_sub_query_set_sparse_indices(self.ptr, indices.as_ptr(), n) };
         check_error(code as c_int)?;
-        let code = unsafe {
-            ffi::zvec_sub_query_set_sparse_values(self.ptr, values.as_ptr(), n)
-        };
+        let code = unsafe { ffi::zvec_sub_query_set_sparse_values(self.ptr, values.as_ptr(), n) };
         check_error(code as c_int)?;
         Ok(self)
     }
@@ -189,8 +184,7 @@ impl MultiQuery {
         let fields_c: Vec<CString> = fields
             .iter()
             .map(|f| {
-                CString::new(*f)
-                    .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))
+                CString::new(*f).map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))
             })
             .collect::<Result<_>>()?;
         let mut fields_ptr: Vec<*const std::os::raw::c_char> =
@@ -219,11 +213,7 @@ impl MultiQuery {
     /// i-th sub-query added via [`add_sub_query`](Self::add_sub_query).
     pub fn rerank_weighted(self, weights: &[f64]) -> Result<Self> {
         let code = unsafe {
-            ffi::zvec_multi_query_set_rerank_weighted(
-                self.ptr,
-                weights.as_ptr(),
-                weights.len(),
-            )
+            ffi::zvec_multi_query_set_rerank_weighted(self.ptr, weights.as_ptr(), weights.len())
         };
         check_error(code as c_int)?;
         Ok(self)

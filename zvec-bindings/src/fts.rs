@@ -52,8 +52,8 @@ impl Fts {
     /// Mutually exclusive with [`set_match_string`](Self::set_match_string);
     /// pick one.
     pub fn set_query_string(&mut self, s: &str) -> Result<&mut Self> {
-        let cstr = CString::new(s)
-            .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
+        let cstr =
+            CString::new(s).map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
         let code = unsafe { ffi::zvec_fts_set_query_string(self.ptr, cstr.as_ptr()) };
         check_error(code as c_int)?;
         Ok(self)
@@ -64,8 +64,8 @@ impl Fts {
     ///
     /// Mutually exclusive with [`set_query_string`](Self::set_query_string).
     pub fn set_match_string(&mut self, s: &str) -> Result<&mut Self> {
-        let cstr = CString::new(s)
-            .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
+        let cstr =
+            CString::new(s).map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
         let code = unsafe { ffi::zvec_fts_set_match_string(self.ptr, cstr.as_ptr()) };
         check_error(code as c_int)?;
         Ok(self)

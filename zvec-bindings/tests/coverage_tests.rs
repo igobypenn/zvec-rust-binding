@@ -899,6 +899,7 @@ mod coverage_tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)] // test value coincidentally resembles PI; not a constant use
     fn test_doc_ref_get_double() -> zvec_bindings::Result<()> {
         let dir = tempdir()?;
         let path = dir.path().join("test_db");

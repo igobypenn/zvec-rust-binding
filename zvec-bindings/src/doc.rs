@@ -136,8 +136,8 @@ impl Doc {
     }
 
     pub fn set_string(&mut self, field: &str, value: &str) -> Result<()> {
-        let value_c = CString::new(value)
-            .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
+        let value_c =
+            CString::new(value).map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
         set_field_by_value_raw(
             self.ptr,
             field,
@@ -172,7 +172,9 @@ impl Doc {
         // as: [nnz: u32][indices: u32 * nnz][values: f32 * nnz].
         let nnz = indices.len();
         let mut buf: Vec<u8> = Vec::with_capacity(
-            std::mem::size_of::<u32>() + nnz * std::mem::size_of::<u32>() + nnz * std::mem::size_of::<f32>(),
+            std::mem::size_of::<u32>()
+                + nnz * std::mem::size_of::<u32>()
+                + nnz * std::mem::size_of::<f32>(),
         );
         buf.extend_from_slice(&(nnz as u32).to_ne_bytes());
         for &idx in indices {
@@ -292,17 +294,10 @@ fn set_field_by_value_raw(
     value: *const std::os::raw::c_void,
     value_size: usize,
 ) -> Result<()> {
-    let field_c = CString::new(field).map_err(|e| {
-        crate::error::Error::InvalidArgument(format!("field name: {}", e))
-    })?;
+    let field_c = CString::new(field)
+        .map_err(|e| crate::error::Error::InvalidArgument(format!("field name: {}", e)))?;
     let code = unsafe {
-        ffi::zvec_doc_add_field_by_value(
-            doc,
-            field_c.as_ptr(),
-            data_type.into(),
-            value,
-            value_size,
-        )
+        ffi::zvec_doc_add_field_by_value(doc, field_c.as_ptr(), data_type.into(), value, value_size)
     };
     check_error(code as c_int)
 }

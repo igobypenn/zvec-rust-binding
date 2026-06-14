@@ -157,9 +157,7 @@ pub(crate) fn last_error_message() -> String {
         if buf.is_null() {
             return String::new();
         }
-        let s = std::ffi::CStr::from_ptr(buf)
-            .to_string_lossy()
-            .into_owned();
+        let s = std::ffi::CStr::from_ptr(buf).to_string_lossy().into_owned();
         crate::ffi::zvec_free(buf as *mut _);
         s
     }

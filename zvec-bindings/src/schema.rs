@@ -13,9 +13,8 @@ pub struct FieldSchema {
 impl FieldSchema {
     pub fn new(name: &str, data_type: DataType) -> Self {
         let name_c = CString::new(name).expect("name contains NUL byte");
-        let ptr = unsafe {
-            ffi::zvec_field_schema_create(name_c.as_ptr(), data_type.into(), false, 0)
-        };
+        let ptr =
+            unsafe { ffi::zvec_field_schema_create(name_c.as_ptr(), data_type.into(), false, 0) };
         Self { ptr, owned: true }
     }
 
@@ -63,8 +62,7 @@ impl FieldSchema {
     /// are indexed as they are inserted. Upstream deep-copies the params,
     /// so the caller retains ownership of `params`.
     pub fn set_index_params(&mut self, params: &crate::IndexParams) -> Result<()> {
-        let code =
-            unsafe { ffi::zvec_field_schema_set_index_params(self.ptr, params.ptr) };
+        let code = unsafe { ffi::zvec_field_schema_set_index_params(self.ptr, params.ptr) };
         check_error(code as c_int)
     }
 
@@ -150,8 +148,7 @@ impl CollectionSchema {
     /// ```
     pub fn add_field(&mut self, field: impl Into<FieldSchema>) -> Result<()> {
         let field = field.into();
-        let code =
-            unsafe { ffi::zvec_collection_schema_add_field(self.ptr, field.ptr) };
+        let code = unsafe { ffi::zvec_collection_schema_add_field(self.ptr, field.ptr) };
         check_error(code as c_int)
     }
 

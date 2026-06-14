@@ -13,9 +13,7 @@ pub struct HnswQueryParam {
 
 impl HnswQueryParam {
     pub fn new(ef_search: i32) -> Self {
-        let ptr = unsafe {
-            ffi::zvec_query_params_hnsw_create(ef_search, 0.0, false, false)
-        };
+        let ptr = unsafe { ffi::zvec_query_params_hnsw_create(ef_search, 0.0, false, false) };
         Self { ptr, ef_search }
     }
 
@@ -98,7 +96,10 @@ impl FtsQueryParam {
     /// to keep the library default.
     pub fn new(default_operator: Option<&str>) -> Self {
         let op_c = default_operator.map(|s| CString::new(s).expect("operator contains NUL byte"));
-        let op_ptr = op_c.as_ref().map(|c| c.as_ptr()).unwrap_or(std::ptr::null());
+        let op_ptr = op_c
+            .as_ref()
+            .map(|c| c.as_ptr())
+            .unwrap_or(std::ptr::null());
         let ptr = unsafe { ffi::zvec_query_params_fts_create(op_ptr) };
         Self { ptr }
     }
@@ -137,8 +138,7 @@ impl VectorQuery {
     }
 
     pub fn topk(self, topk: usize) -> Self {
-        let code =
-            unsafe { ffi::zvec_vector_query_set_topk(self.ptr, topk as c_int) };
+        let code = unsafe { ffi::zvec_vector_query_set_topk(self.ptr, topk as c_int) };
         // topk setter does not fail for valid inputs; ignore non-fatal codes.
         let _ = check_error(code as c_int);
         self
@@ -256,7 +256,9 @@ impl VectorQuery {
         }
         let nnz = indices.len();
         let mut buf: Vec<u8> = Vec::with_capacity(
-            std::mem::size_of::<u32>() + nnz * std::mem::size_of::<u32>() + nnz * std::mem::size_of::<f32>(),
+            std::mem::size_of::<u32>()
+                + nnz * std::mem::size_of::<u32>()
+                + nnz * std::mem::size_of::<f32>(),
         );
         buf.extend_from_slice(&(nnz as u32).to_ne_bytes());
         for &idx in indices {
