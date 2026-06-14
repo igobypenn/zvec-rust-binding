@@ -6,7 +6,7 @@ use crate::doc::{Doc, DocList, DocMap, WriteResults};
 use crate::error::Result;
 use crate::query::{GroupByVectorQuery, GroupResults, VectorQuery};
 use crate::schema::CollectionSchema;
-use crate::IndexParams;
+use crate::{IndexParams, MultiQuery};
 
 /// A thread-safe wrapper around [`Collection`] for concurrent access.
 ///
@@ -72,6 +72,14 @@ impl SharedCollection {
     pub fn group_by_query(&self, query: GroupByVectorQuery) -> Result<GroupResults> {
         let guard = self.inner.read().expect("collection lock poisoned");
         guard.group_by_query(query)
+    }
+
+    /// Execute a multi-query (hybrid search).
+    ///
+    /// Takes a read lock, allowing concurrent queries.
+    pub fn multi_query(&self, query: &MultiQuery) -> Result<DocList> {
+        let guard = self.inner.read().expect("collection lock poisoned");
+        guard.multi_query(query)
     }
 
     /// Fetch documents by primary key.

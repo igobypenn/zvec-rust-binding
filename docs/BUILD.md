@@ -116,15 +116,23 @@ cargo build
 │  │ 0. Check: Does vendor/zvec/CMakeLists.txt exist?        │   │
 │  │    NO → git clone zvec source from GitHub               │   │
 │  │                                                          │   │
-│  │ 1. Check: Does vendor/zvec/build/lib/*.a exist?         │   │
-│  │    NO → Run cmake + make to build zvec                  │   │
+│  │ 1. Check: Does vendor/zvec/build/lib/libzvec.a exist?   │   │
+│  │    NO → Run cmake + make to build zvec (produces all    │   │
+│  │         static archives + configured c_api.h)           │   │
 │  │                                                          │   │
-│  │ 2. Check: Does zvec-c-wrapper/build/*.a exist?          │   │
-│  │    NO → Run cmake + make to build C wrapper             │   │
+│  │ 2. Check: ${OUT_DIR}/c-api-static-build/                │   │
+│  │    libzvec_c_api_static.a exist?                         │   │
+│  │    NO → Run cmake overlay to compile upstream           │   │
+│  │         src/binding/c/c_api.cc as a static library      │   │
 │  │                                                          │   │
-│  │ 3. Run bindgen to generate Rust FFI from zvec_c.h       │   │
+│  │ 3. Check: ${OUT_DIR}/groupby-shim-build/                │   │
+│  │    libzvec_groupby_shim.a exist?                         │   │
+│  │    NO → Run cmake to compile the group-by shim          │   │
+│  │         (group_by_query is not in upstream C API)       │   │
 │  │                                                          │   │
-│  │ 4. Emit cargo:rustc-link-lib directives                 │   │
+│  │ 4. Run bindgen on the configured c_api.h + shim header  │   │
+│  │                                                          │   │
+│  │ 5. Emit cargo:rustc-link-lib directives                 │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -134,20 +142,26 @@ cargo build
 │  Rust Compiler + Linker                                         │
 │                                                                 │
 │  Links all static libraries into final binary:                  │
-│  - libzvec_c_wrapper.a (C wrapper)                              │
-│  - libzvec_*.a (zvec components)                                │
-│  - libcore_*.a (core index implementations)                     │
-│  - Third-party libs (rocksdb, protobuf, arrow, etc.)            │
+│  - libzvec_c_api_static.a (upstream c_api.cc, our overlay)      │
+│  - libzvec_groupby_shim.a (group_by_query shim)                 │
+│  - libzvec.a, libzvec_core.a, libzvec_ailego.a, libzvec_turbo.a │
+│  - Third-party libs (rocksdb, protobuf, arrow, FastPFOR, etc.)  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+The v0.5.0 migration replaced a 2,181-line hand-written C++ wrapper with a
+single upstream source file (`c_api.cc`) compiled by a small CMake overlay.
+This preserves the project's static-linking deployment story: the final
+binary has no runtime `.so` dependency and no `LD_LIBRARY_PATH` requirement.
 
 ### What Gets Built
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| zvec C++ | `vendor/zvec/lib/*.a` | Core vector database library |
-| C wrapper | `zvec-c-wrapper/build/libzvec_c_wrapper.a` | C API shim |
-| Rust FFI | `target/debug/build/zvec-sys-*/out/bindings.rs` | Auto-generated bindings |
+| zvec C++ | `vendor/zvec/build/lib/*.a` | Core vector database library (v0.5.0) |
+| c_api static | `${OUT_DIR}/c-api-static-build/libzvec_c_api_static.a` | Upstream C API, statically compiled |
+| groupby shim | `${OUT_DIR}/groupby-shim-build/libzvec_groupby_shim.a` | Group-by query wrapper (not in upstream C API) |
+| Rust FFI | `target/debug/build/zvec-sys-*/out/bindings.rs` | Auto-generated bindgen bindings |
 | zvec crate | `target/debug/libzvec*.rlib` | Rust library |
 
 ## Configuration
@@ -156,7 +170,7 @@ cargo build
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ZVEC_GIT_REF` | `v0.1.1` | zvec git ref to download (tag, branch, or commit) |
+| `ZVEC_GIT_REF` | `v0.5.0` | zvec git ref to download (tag, branch, or commit) |
 | `ZVEC_BUILD_TYPE` | `Release` | CMake build type (`Debug`, `Release`, `RelWithDebInfo`) |
 | `ZVEC_BUILD_PARALLEL` | CPU count | Number of parallel make jobs |
 | `ZVEC_CPU_ARCH` | auto-detect | CPU architecture optimization (see below) |
@@ -238,7 +252,6 @@ cargo clean
 # Clean everything (including C++ builds)
 cargo clean
 rm -rf vendor/zvec/build
-rm -rf zvec-c-wrapper/build
 ```
 
 ## Feature Flags
@@ -373,18 +386,32 @@ make -j$(nproc)
 # Libraries are output to ../lib/
 ```
 
-### Step 2: Build C Wrapper
+### Step 2: Build C API static library (overlay)
 
 ```bash
-cd ../../zvec-c-wrapper
-mkdir -p build && cd build
+mkdir -p zvec-sys/.c-api-static-build && cd zvec-sys/.c-api-static-build
 
-cmake -DZVEC_SRC_DIR=../vendor/zvec ..
+cmake \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DZVEC_SRC=../../vendor/zvec \
+    -DZVEC_BUILD=../../vendor/zvec/build \
+    ../c-api-static
+
 make -j$(nproc)
-# Library is output to ./libzvec_c_wrapper.a
+# Library is output to ./libzvec_c_api_static.a
 ```
 
-### Step 3: Build Rust
+### Step 3: Build group-by shim
+
+```bash
+cd ../groupby-shim
+mkdir -p build && cd build
+cmake -DZVEC_SRC=../../vendor/zvec ..
+make -j$(nproc)
+# Library is output to ./libzvec_groupby_shim.a
+```
+
+### Step 4: Build Rust
 
 ```bash
 cd ../..

@@ -8,7 +8,7 @@
 //! - Full API coverage for vector similarity search
 //! - Safe Rust API with proper error handling
 //! - Support for dense and sparse vectors
-//! - HNSW, IVF, and FLAT index types
+//! - HNSW, IVF, FLAT, and FTS index types
 //! - Static linking for easy deployment
 //! - Optional thread-safe [`SharedCollection`] via `sync` feature
 //!
@@ -120,12 +120,20 @@ pub mod types;
 #[cfg(feature = "sync")]
 pub mod sync;
 
+pub mod fts;
+pub mod multi_query;
+
 pub use collection::Collection;
 pub use collection::CollectionStats;
 pub use collection::IndexParams;
 pub use doc::Doc;
 pub use error::{Error, Result, StatusCode};
-pub use query::{GroupByVectorQuery, HnswQueryParam, IVFQueryParam, VectorQuery};
+pub use fts::Fts;
+pub use multi_query::{MultiQuery, SubQuery};
+pub use query::{
+    FlatQueryParam, FtsQueryParam, GroupByVectorQuery, HnswQueryParam, IVFQueryParam, QueryParam,
+    VectorQuery,
+};
 pub use rerank::{RrfReRanker, WeightedReRanker};
 pub use schema::{CollectionSchema, FieldSchema, VectorSchema};
 pub use types::{DataType, IndexType, LogLevel, LogType, MetricType, QuantizeType};
@@ -133,36 +141,228 @@ pub use types::{DataType, IndexType, LogLevel, LogType, MetricType, QuantizeType
 #[cfg(feature = "sync")]
 pub use sync::{create_and_open_shared, open_shared, SharedCollection};
 
+/// Initialize the zvec library with default configuration.
+///
+/// Calls `zvec_initialize(NULL)` (zvec v0.5.0 C API). Optional — the
+/// library auto-initializes on first use. Safe to call multiple times;
+/// subsequent calls after the first are no-ops at the C layer.
 pub fn init() -> Result<()> {
-    let success = unsafe { ffi::zvec_init() };
-    if success {
-        Ok(())
-    } else {
-        Err(Error::InternalError("Failed to initialize zvec".into()))
+    let code = unsafe { ffi::zvec_initialize(std::ptr::null()) };
+    crate::error::check_error(code as std::os::raw::c_int)
+}
+
+/// Returns true if the zvec runtime has been initialized.
+pub fn is_initialized() -> bool {
+    unsafe { ffi::zvec_is_initialized() }
+}
+
+/// Shut down the zvec library and release all global resources.
+///
+/// After this call, the library can be re-initialized with [`init`] or
+/// [`LogConfig::apply`]. Existing [`Collection`] handles should not be
+/// used after shutdown.
+pub fn shutdown() -> Result<()> {
+    let code = unsafe { ffi::zvec_shutdown() };
+    crate::error::check_error(code as std::os::raw::c_int)
+}
+
+/// Returns the zvec runtime version string (e.g. `"0.5.0-g<git> (built ...)"`).
+///
+/// The string is owned by the library and valid for the lifetime of the
+/// process; do not free it.
+pub fn version() -> String {
+    unsafe {
+        let ptr = ffi::zvec_get_version();
+        if ptr.is_null() {
+            return String::new();
+        }
+        std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
     }
 }
 
-pub fn list_registered_metrics() -> Vec<String> {
-    let mut metrics_ptr: *mut *const std::os::raw::c_char = std::ptr::null_mut();
-    let count = unsafe { ffi::zvec_list_registered_metrics(&mut metrics_ptr) };
-
-    if metrics_ptr.is_null() || count <= 0 {
-        return Vec::new();
+/// Returns the runtime zvec version as `(major, minor, patch)`.
+pub fn version_tuple() -> (u32, u32, u32) {
+    unsafe {
+        (
+            ffi::zvec_get_version_major() as u32,
+            ffi::zvec_get_version_minor() as u32,
+            ffi::zvec_get_version_patch() as u32,
+        )
     }
+}
 
-    let mut result = Vec::with_capacity(count as usize);
-    for i in 0..count as usize {
-        unsafe {
-            let ptr = *metrics_ptr.add(i);
-            if !ptr.is_null() {
-                let cstr = std::ffi::CStr::from_ptr(ptr);
-                if let Ok(s) = cstr.to_str() {
-                    result.push(s.to_string());
-                }
-            }
+/// Returns true if the runtime zvec version is at least the given version.
+pub fn check_version(major: u32, minor: u32, patch: u32) -> bool {
+    unsafe {
+        ffi::zvec_check_version(
+            major as std::os::raw::c_int,
+            minor as std::os::raw::c_int,
+            patch as std::os::raw::c_int,
+        )
+    }
+}
+
+/// Set the process-wide default jieba dict directory (used by the FTS
+/// jieba tokenizer when no per-field dict dir is configured).
+///
+/// Pass an empty string or `None` to clear. This is decoupled from
+/// [`init`]; last writer wins.
+pub fn set_default_jieba_dict_dir(path: Option<&str>) {
+    let cstr = match path {
+        Some(s) if !s.is_empty() => {
+            Some(std::ffi::CString::new(s).expect("jieba dict dir contains NUL byte"))
+        }
+        _ => None,
+    };
+    let ptr = cstr
+        .as_ref()
+        .map(|c| c.as_ptr())
+        .unwrap_or(std::ptr::null());
+    unsafe { ffi::zvec_set_default_jieba_dict_dir(ptr) };
+}
+
+// ===== LogConfig =====
+
+/// Builder for the zvec runtime log configuration.
+///
+/// Construct with [`LogConfig::console`] or [`LogConfig::file`], optionally
+/// tune file rotation via [`with_max_file_size`](Self::with_max_file_size)
+/// and [`with_overdue_days`](Self::with_overdue_days), then call
+/// [`apply`](Self::apply) to initialize the zvec runtime with this log
+/// configuration.
+///
+/// `apply` consumes self and calls `zvec_initialize(config)`; the library
+/// must not already be initialized (call [`shutdown`] first to re-configure
+/// logging on an already-running runtime).
+pub struct LogConfig {
+    level: LogLevel,
+    is_file: bool,
+    dir: Option<String>,
+    basename: Option<String>,
+    max_file_size_mb: u32,
+    overdue_days: u32,
+}
+
+impl LogConfig {
+    /// Create a console (stderr) log configuration at the given level.
+    pub fn console(level: LogLevel) -> Self {
+        Self {
+            level,
+            is_file: false,
+            dir: None,
+            basename: None,
+            max_file_size_mb: 0,
+            overdue_days: 0,
         }
     }
-    result
+
+    /// Create a file-based log configuration.
+    ///
+    /// `dir` is the log directory; `basename` is the log file base name.
+    /// Default rotation is 100 MB file size with 7-day retention; override
+    /// with [`with_max_file_size`](Self::with_max_file_size) and
+    /// [`with_overdue_days`](Self::with_overdue_days).
+    pub fn file(level: LogLevel, dir: &str, basename: &str) -> Self {
+        Self {
+            level,
+            is_file: true,
+            dir: Some(dir.to_string()),
+            basename: Some(basename.to_string()),
+            max_file_size_mb: 100,
+            overdue_days: 7,
+        }
+    }
+
+    /// Override the per-file maximum size (bytes). Only meaningful for
+    /// file loggers.
+    pub fn with_max_file_size(mut self, size: u64) -> Self {
+        // FFI expects MB; convert from bytes (round up to at least 1 MB).
+        self.max_file_size_mb = ((size + (1 << 20) - 1) >> 20) as u32;
+        self
+    }
+
+    /// Override the log retention window in days. Only meaningful for
+    /// file loggers.
+    pub fn with_overdue_days(mut self, days: u32) -> Self {
+        self.overdue_days = days;
+        self
+    }
+
+    /// Apply this configuration to the zvec runtime.
+    ///
+    /// Builds a `zvec_config_data_t` with the log config attached and
+    /// calls `zvec_initialize`. Returns an error if initialization fails
+    /// (e.g. the library is already initialized — call [`shutdown`] first).
+    pub fn apply(self) -> Result<()> {
+        use std::os::raw::c_int;
+
+        // 1. Build the log_config.
+        let log_config = if self.is_file {
+            let dir = self
+                .dir
+                .as_ref()
+                .expect("file logger requires dir; this is a LogConfig bug");
+            let basename = self
+                .basename
+                .as_ref()
+                .expect("file logger requires basename; this is a LogConfig bug");
+            let dir_c = std::ffi::CString::new(dir.as_str())
+                .map_err(|e| Error::InvalidArgument(e.to_string()))?;
+            let basename_c = std::ffi::CString::new(basename.as_str())
+                .map_err(|e| Error::InvalidArgument(e.to_string()))?;
+            unsafe {
+                ffi::zvec_config_log_create_file(
+                    self.level.into(),
+                    dir_c.as_ptr(),
+                    basename_c.as_ptr(),
+                    self.max_file_size_mb,
+                    self.overdue_days,
+                )
+            }
+        } else {
+            unsafe { ffi::zvec_config_log_create_console(self.level.into()) }
+        };
+
+        if log_config.is_null() {
+            return Err(Error::InternalError(
+                "zvec_config_log_create_* returned null".into(),
+            ));
+        }
+
+        // 2. Build the config_data and attach the log config (ownership
+        //    of log_config is transferred to config_data on success).
+        let config_data = unsafe { ffi::zvec_config_data_create() };
+        if config_data.is_null() {
+            unsafe { ffi::zvec_config_log_destroy(log_config) };
+            return Err(Error::InternalError(
+                "zvec_config_data_create returned null".into(),
+            ));
+        }
+
+        let mut overall: Result<()> = Ok(());
+        let set_code = unsafe { ffi::zvec_config_data_set_log_config(config_data, log_config) };
+        if let Err(e) = crate::error::check_error(set_code as c_int) {
+            overall = Err(e);
+        } else {
+            // 3. Initialize the library with the assembled config.
+            let init_code = unsafe { ffi::zvec_initialize(config_data) };
+            if let Err(e) = crate::error::check_error(init_code as c_int) {
+                overall = Err(e);
+            }
+        }
+
+        unsafe { ffi::zvec_config_data_destroy(config_data) };
+        overall
+    }
+}
+
+/// List registered metric type names.
+///
+/// **Deprecated:** the upstream zvec v0.5.0 C API does not expose a metric
+/// listing function. This always returns an empty `Vec`.
+#[deprecated(note = "upstream zvec v0.5.0 does not expose a metric listing API")]
+pub fn list_registered_metrics() -> Vec<String> {
+    Vec::new()
 }
 
 pub fn create_and_open<P: AsRef<std::path::Path>>(

@@ -1,16 +1,19 @@
 use std::ffi::CString;
+use std::os::raw::c_int;
 
-use crate::error::{check_status, Result};
+use crate::error::{check_error, Result};
 use crate::ffi;
 
+// ===== HNSW query params =====
+
 pub struct HnswQueryParam {
-    pub(crate) ptr: *mut ffi::zvec_query_params_t,
+    pub(crate) ptr: *mut ffi::zvec_hnsw_query_params_t,
     ef_search: i32,
 }
 
 impl HnswQueryParam {
     pub fn new(ef_search: i32) -> Self {
-        let ptr = unsafe { ffi::zvec_query_params_new_hnsw(ef_search) };
+        let ptr = unsafe { ffi::zvec_query_params_hnsw_create(ef_search, 0.0, false, false) };
         Self { ptr, ef_search }
     }
 
@@ -22,19 +25,21 @@ impl HnswQueryParam {
 impl Drop for HnswQueryParam {
     fn drop(&mut self) {
         if !self.ptr.is_null() {
-            unsafe { ffi::zvec_query_params_free(self.ptr) };
+            unsafe { ffi::zvec_query_params_hnsw_destroy(self.ptr) };
         }
     }
 }
 
+// ===== IVF query params =====
+
 pub struct IVFQueryParam {
-    pub(crate) ptr: *mut ffi::zvec_query_params_t,
+    pub(crate) ptr: *mut ffi::zvec_ivf_query_params_t,
     nprobe: i32,
 }
 
 impl IVFQueryParam {
     pub fn new(nprobe: i32) -> Self {
-        let ptr = unsafe { ffi::zvec_query_params_new_ivf(nprobe) };
+        let ptr = unsafe { ffi::zvec_query_params_ivf_create(nprobe, false, 10.0) };
         Self { ptr, nprobe }
     }
 
@@ -46,15 +51,78 @@ impl IVFQueryParam {
 impl Drop for IVFQueryParam {
     fn drop(&mut self) {
         if !self.ptr.is_null() {
-            unsafe { ffi::zvec_query_params_free(self.ptr) };
+            unsafe { ffi::zvec_query_params_ivf_destroy(self.ptr) };
         }
     }
 }
 
+// ===== Flat query params =====
+
+/// Flat (brute-force) query parameters (zvec v0.5.0).
+pub struct FlatQueryParam {
+    pub(crate) ptr: *mut ffi::zvec_flat_query_params_t,
+}
+
+impl FlatQueryParam {
+    pub fn new() -> Self {
+        let ptr = unsafe { ffi::zvec_query_params_flat_create(false, 10.0) };
+        Self { ptr }
+    }
+}
+
+impl Default for FlatQueryParam {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for FlatQueryParam {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            unsafe { ffi::zvec_query_params_flat_destroy(self.ptr) };
+        }
+    }
+}
+
+// ===== FTS query params =====
+
+/// Full-text-search query parameters (zvec v0.5.0).
+pub struct FtsQueryParam {
+    pub(crate) ptr: *mut ffi::zvec_fts_query_params_t,
+}
+
+impl FtsQueryParam {
+    /// `default_operator` is "OR" or "AND" (case-insensitive); pass `None`
+    /// to keep the library default.
+    pub fn new(default_operator: Option<&str>) -> Self {
+        let op_c = default_operator.map(|s| CString::new(s).expect("operator contains NUL byte"));
+        let op_ptr = op_c
+            .as_ref()
+            .map(|c| c.as_ptr())
+            .unwrap_or(std::ptr::null());
+        let ptr = unsafe { ffi::zvec_query_params_fts_create(op_ptr) };
+        Self { ptr }
+    }
+}
+
+impl Drop for FtsQueryParam {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            unsafe { ffi::zvec_query_params_fts_destroy(self.ptr) };
+        }
+    }
+}
+
+// ===== QueryParam enum =====
+
 pub enum QueryParam {
     Hnsw(HnswQueryParam),
     IVF(IVFQueryParam),
+    Flat(FlatQueryParam),
+    Fts(FtsQueryParam),
 }
+
+// ===== VectorQuery =====
 
 pub struct VectorQuery {
     pub(crate) ptr: *mut ffi::zvec_vector_query_t,
@@ -64,28 +132,34 @@ pub struct VectorQuery {
 impl VectorQuery {
     pub fn new(field_name: &str) -> Self {
         let field_c = CString::new(field_name).expect("field name contains NUL byte");
-        let ptr = unsafe { ffi::zvec_vector_query_new(field_c.as_ptr()) };
+        let ptr = unsafe { ffi::zvec_vector_query_create() };
+        unsafe { ffi::zvec_vector_query_set_field_name(ptr, field_c.as_ptr()) };
         Self { ptr, id: None }
     }
 
     pub fn topk(self, topk: usize) -> Self {
-        unsafe { ffi::zvec_vector_query_set_topk(self.ptr, topk as std::os::raw::c_int) };
+        let code = unsafe { ffi::zvec_vector_query_set_topk(self.ptr, topk as c_int) };
+        // topk setter does not fail for valid inputs; ignore non-fatal codes.
+        let _ = check_error(code as c_int);
         self
     }
 
     pub fn filter(self, filter: &str) -> Self {
         let filter_c = CString::new(filter).expect("filter contains NUL byte");
-        unsafe { ffi::zvec_vector_query_set_filter(self.ptr, filter_c.as_ptr()) };
+        let code = unsafe { ffi::zvec_vector_query_set_filter(self.ptr, filter_c.as_ptr()) };
+        let _ = check_error(code as c_int);
         self
     }
 
     pub fn include_vector(self, include: bool) -> Self {
-        unsafe { ffi::zvec_vector_query_set_include_vector(self.ptr, include) };
+        let code = unsafe { ffi::zvec_vector_query_set_include_vector(self.ptr, include) };
+        let _ = check_error(code as c_int);
         self
     }
 
     pub fn include_doc_id(self, include: bool) -> Self {
-        unsafe { ffi::zvec_vector_query_set_include_doc_id(self.ptr, include) };
+        let code = unsafe { ffi::zvec_vector_query_set_include_doc_id(self.ptr, include) };
+        let _ = check_error(code as c_int);
         self
     }
 
@@ -96,23 +170,41 @@ impl VectorQuery {
             .collect();
         let mut fields_ptr: Vec<*const std::os::raw::c_char> =
             fields_c.iter().map(|f| f.as_ptr()).collect();
-        unsafe {
+        let code = unsafe {
             ffi::zvec_vector_query_set_output_fields(
                 self.ptr,
                 fields_ptr.as_mut_ptr(),
                 fields_ptr.len(),
             )
         };
+        let _ = check_error(code as c_int);
         self
     }
 
     pub fn query_params(self, params: QueryParam) -> Self {
-        let ptr = match &params {
-            QueryParam::Hnsw(p) => p.ptr,
-            QueryParam::IVF(p) => p.ptr,
+        let code = match params {
+            QueryParam::Hnsw(p) => {
+                let ptr = p.ptr;
+                std::mem::forget(p);
+                unsafe { ffi::zvec_vector_query_set_hnsw_params(self.ptr, ptr) }
+            }
+            QueryParam::IVF(p) => {
+                let ptr = p.ptr;
+                std::mem::forget(p);
+                unsafe { ffi::zvec_vector_query_set_ivf_params(self.ptr, ptr) }
+            }
+            QueryParam::Flat(p) => {
+                let ptr = p.ptr;
+                std::mem::forget(p);
+                unsafe { ffi::zvec_vector_query_set_flat_params(self.ptr, ptr) }
+            }
+            QueryParam::Fts(p) => {
+                let ptr = p.ptr;
+                std::mem::forget(p);
+                unsafe { ffi::zvec_vector_query_set_fts_params(self.ptr, ptr) }
+            }
         };
-        unsafe { ffi::zvec_vector_query_set_query_params(self.ptr, ptr) };
-        std::mem::forget(params);
+        let _ = check_error(code as c_int);
         self
     }
 
@@ -126,30 +218,63 @@ impl VectorQuery {
         self.query_params(QueryParam::IVF(params))
     }
 
+    /// Set the query vector (dense FP32). The data is copied internally.
     pub fn vector(self, vector: &[f32]) -> Result<Self> {
-        let status = unsafe {
-            ffi::zvec_vector_query_set_vector_fp32(self.ptr, vector.as_ptr(), vector.len())
+        let code = unsafe {
+            ffi::zvec_vector_query_set_query_vector(
+                self.ptr,
+                vector.as_ptr() as *const std::os::raw::c_void,
+                vector.len() * std::mem::size_of::<f32>(),
+            )
         };
-        check_status(status)?;
+        check_error(code as c_int)?;
         Ok(self)
     }
 
+    /// Attach a Full-Text Search payload to this vector query for hybrid
+    /// search. The payload is copied internally by upstream, so `fts`
+    /// is dropped on return regardless of success.
+    ///
+    /// Requires the collection to have an FTS index on the target field.
+    pub fn fts(self, fts: crate::Fts) -> Result<Self> {
+        let code = unsafe { ffi::zvec_vector_query_set_fts(self.ptr, fts.as_ptr()) };
+        // Drop `fts` — upstream copied it; we own our wrapper either way.
+        drop(fts);
+        check_error(code as c_int)?;
+        Ok(self)
+    }
+
+    /// Set a sparse query vector (FP32).
+    ///
+    /// Upstream packs sparse data as `[nnz: u32][indices: u32*nnz][values:
+    /// f32*nnz]` into the generic `set_query_vector` byte buffer.
     pub fn sparse_vector(self, indices: &[u32], values: &[f32]) -> Result<Self> {
         if indices.len() != values.len() {
             return Err(crate::error::Error::InvalidArgument(
                 "indices and values must have same length".into(),
             ));
         }
-        let status = unsafe {
-            ffi::zvec_vector_query_set_sparse_vector_fp32(
+        let nnz = indices.len();
+        let mut buf: Vec<u8> = Vec::with_capacity(
+            std::mem::size_of::<u32>()
+                + nnz * std::mem::size_of::<u32>()
+                + nnz * std::mem::size_of::<f32>(),
+        );
+        buf.extend_from_slice(&(nnz as u32).to_ne_bytes());
+        for &idx in indices {
+            buf.extend_from_slice(&idx.to_ne_bytes());
+        }
+        for &val in values {
+            buf.extend_from_slice(&val.to_ne_bytes());
+        }
+        let code = unsafe {
+            ffi::zvec_vector_query_set_query_vector(
                 self.ptr,
-                indices.as_ptr(),
-                indices.len(),
-                values.as_ptr(),
-                values.len(),
+                buf.as_ptr() as *const std::os::raw::c_void,
+                buf.len(),
             )
         };
-        check_status(status)?;
+        check_error(code as c_int)?;
         Ok(self)
     }
 
@@ -178,41 +303,43 @@ impl VectorQuery {
 impl Drop for VectorQuery {
     fn drop(&mut self) {
         if !self.ptr.is_null() {
-            unsafe { ffi::zvec_vector_query_free(self.ptr) };
+            unsafe { ffi::zvec_vector_query_destroy(self.ptr) };
         }
     }
 }
 
+// ===== GroupByVectorQuery (uses the zvecgb_* shim) =====
+
 pub struct GroupByVectorQuery {
-    pub(crate) ptr: *mut ffi::zvec_group_by_vector_query_t,
+    pub(crate) ptr: *mut ffi::zvecgb_group_by_vector_query_t,
 }
 
 impl GroupByVectorQuery {
     pub fn new(field_name: &str) -> Self {
         let field_c = CString::new(field_name).expect("field name contains NUL byte");
-        let ptr = unsafe { ffi::zvec_group_by_vector_query_new(field_c.as_ptr()) };
+        let ptr = unsafe { ffi::zvecgb_group_by_vector_query_create(field_c.as_ptr()) };
         Self { ptr }
     }
 
     pub fn group_by(self, field_name: &str) -> Self {
         let field_c = CString::new(field_name).expect("field name contains NUL byte");
-        unsafe { ffi::zvec_group_by_vector_query_set_group_by_field(self.ptr, field_c.as_ptr()) };
+        unsafe { ffi::zvecgb_group_by_vector_query_set_group_by_field(self.ptr, field_c.as_ptr()) };
         self
     }
 
     pub fn group_count(self, count: u32) -> Self {
-        unsafe { ffi::zvec_group_by_vector_query_set_group_count(self.ptr, count) };
+        unsafe { ffi::zvecgb_group_by_vector_query_set_group_count(self.ptr, count) };
         self
     }
 
     pub fn group_topk(self, topk: u32) -> Self {
-        unsafe { ffi::zvec_group_by_vector_query_set_group_topk(self.ptr, topk) };
+        unsafe { ffi::zvecgb_group_by_vector_query_set_group_topk(self.ptr, topk) };
         self
     }
 
     pub fn filter(self, filter: &str) -> Self {
         let filter_c = CString::new(filter).expect("filter contains NUL byte");
-        unsafe { ffi::zvec_group_by_vector_query_set_filter(self.ptr, filter_c.as_ptr()) };
+        unsafe { ffi::zvecgb_group_by_vector_query_set_filter(self.ptr, filter_c.as_ptr()) };
         self
     }
 
@@ -224,7 +351,7 @@ impl GroupByVectorQuery {
         let mut fields_ptr: Vec<*const std::os::raw::c_char> =
             fields_c.iter().map(|f| f.as_ptr()).collect();
         unsafe {
-            ffi::zvec_group_by_vector_query_set_output_fields(
+            ffi::zvecgb_group_by_vector_query_set_output_fields(
                 self.ptr,
                 fields_ptr.as_mut_ptr(),
                 fields_ptr.len(),
@@ -234,39 +361,60 @@ impl GroupByVectorQuery {
     }
 
     pub fn vector(self, vector: &[f32]) -> Result<Self> {
-        let status = unsafe {
-            ffi::zvec_group_by_vector_query_set_vector_fp32(self.ptr, vector.as_ptr(), vector.len())
+        let code = unsafe {
+            ffi::zvecgb_group_by_vector_query_set_vector_fp32(
+                self.ptr,
+                vector.as_ptr(),
+                vector.len(),
+            )
         };
-        check_status(status)?;
-        Ok(self)
+        if code == 0 {
+            Ok(self)
+        } else {
+            Err(crate::error::Error::InternalError(format!(
+                "group_by_vector_query set_vector failed (code={})",
+                code
+            )))
+        }
     }
 }
 
 impl Drop for GroupByVectorQuery {
     fn drop(&mut self) {
         if !self.ptr.is_null() {
-            unsafe { ffi::zvec_group_by_vector_query_free(self.ptr) };
+            unsafe { ffi::zvecgb_group_by_vector_query_destroy(self.ptr) };
         }
     }
 }
 
+// ===== GroupResults =====
+
+/// Owning wrapper around `zvecgb_group_results_t`.
 pub struct GroupResults {
-    pub(crate) inner: ffi::zvec_group_results_t,
+    pub(crate) ptr: *mut ffi::zvecgb_group_results_t,
 }
 
 impl GroupResults {
+    /// Construct from a raw pointer. Takes ownership; the pointer will be
+    /// destroyed on drop.
+    pub(crate) fn from_ptr(ptr: *mut ffi::zvecgb_group_results_t) -> Self {
+        Self { ptr }
+    }
+
     pub fn len(&self) -> usize {
-        self.inner.count
+        unsafe { ffi::zvecgb_group_results_count(self.ptr) }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.inner.count == 0
+        self.len() == 0
     }
 
     pub fn get(&self, index: usize) -> Option<GroupResultRef<'_>> {
-        if index < self.inner.count {
+        let count = self.len();
+        if index < count {
             Some(GroupResultRef {
-                inner: unsafe { &*self.inner.groups.add(index) },
+                results: self.ptr,
+                index,
                 _marker: std::marker::PhantomData,
             })
         } else {
@@ -281,30 +429,41 @@ impl GroupResults {
 
 impl Drop for GroupResults {
     fn drop(&mut self) {
-        unsafe { ffi::zvec_group_results_free(&mut self.inner) };
+        if !self.ptr.is_null() {
+            unsafe { ffi::zvecgb_group_results_destroy(self.ptr) };
+        }
     }
 }
 
+/// A borrowed view into one group inside [`GroupResults`].
 pub struct GroupResultRef<'a> {
-    inner: &'a ffi::zvec_group_result_t,
+    results: *const ffi::zvecgb_group_results_t,
+    index: usize,
     _marker: std::marker::PhantomData<&'a ()>,
 }
 
 impl<'a> GroupResultRef<'a> {
     pub fn group_by_value(&self) -> &str {
         unsafe {
-            if self.inner.group_by_value.is_null() {
+            let ptr = ffi::zvecgb_group_results_group_by_value(self.results, self.index);
+            if ptr.is_null() {
                 ""
             } else {
-                std::ffi::CStr::from_ptr(self.inner.group_by_value)
-                    .to_str()
-                    .unwrap_or("")
+                std::ffi::CStr::from_ptr(ptr).to_str().unwrap_or("")
             }
         }
     }
 
-    pub fn docs(&self) -> &crate::doc::DocList {
-        unsafe { std::mem::transmute(&self.inner.docs) }
+    /// Returns the documents belonging to this group as a non-owning
+    /// [`DocList`] borrow. The underlying storage is owned by the parent
+    /// [`GroupResults`] and must outlive the returned `DocList`.
+    pub fn docs(&self) -> crate::doc::DocList {
+        unsafe {
+            let ptr = ffi::zvecgb_group_results_docs_ptr(self.results, self.index)
+                as *mut *mut ffi::zvec_doc_t;
+            let count = ffi::zvecgb_group_results_docs_count(self.results, self.index);
+            crate::doc::DocList::borrow_raw(ptr, count)
+        }
     }
 }
 
