@@ -143,7 +143,7 @@ impl Doc {
             field,
             DataType::String,
             value_c.as_ptr() as *const std::os::raw::c_void,
-            0,
+            value.len(),
         )
     }
 

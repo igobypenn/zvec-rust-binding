@@ -231,6 +231,19 @@ impl VectorQuery {
         Ok(self)
     }
 
+    /// Attach a Full-Text Search payload to this vector query for hybrid
+    /// search. The payload is copied internally by upstream, so `fts`
+    /// is dropped on return regardless of success.
+    ///
+    /// Requires the collection to have an FTS index on the target field.
+    pub fn fts(self, fts: crate::Fts) -> Result<Self> {
+        let code = unsafe { ffi::zvec_vector_query_set_fts(self.ptr, fts.as_ptr()) };
+        // Drop `fts` — upstream copied it; we own our wrapper either way.
+        drop(fts);
+        check_error(code as c_int)?;
+        Ok(self)
+    }
+
     /// Set a sparse query vector (FP32).
     ///
     /// Upstream packs sparse data as `[nnz: u32][indices: u32*nnz][values:

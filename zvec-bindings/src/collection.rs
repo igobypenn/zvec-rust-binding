@@ -325,6 +325,20 @@ impl Collection {
         Ok(GroupResults::from_ptr(out))
     }
 
+    /// Execute a multi-query (hybrid search) combining multiple
+    /// sub-queries with optional re-ranking.
+    ///
+    /// Returns a [`DocList`] containing the reranked top-K documents.
+    pub fn multi_query(&self, query: &crate::MultiQuery) -> Result<DocList> {
+        let mut docs: *mut *mut ffi::zvec_doc_t = ptr::null_mut();
+        let mut count: usize = 0;
+        let code = unsafe {
+            ffi::zvec_collection_multi_query(self.ptr, query.as_ptr(), &mut docs, &mut count)
+        };
+        check_error(code as c_int)?;
+        Ok(DocList::from_raw(docs, count))
+    }
+
     /// Fetch documents by primary key.
     ///
     /// Returns a [`DocMap`] mapping primary keys to documents.
@@ -504,7 +518,7 @@ impl Drop for Collection {
 /// let params = IndexParams::flat(MetricType::Cosine, QuantizeType::Undefined);
 /// ```
 pub struct IndexParams {
-    ptr: *mut ffi::zvec_index_params_t,
+    pub(crate) ptr: *mut ffi::zvec_index_params_t,
 }
 
 impl IndexParams {
@@ -587,6 +601,94 @@ impl IndexParams {
                 ffi::zvec_index_params_set_invert_params(ptr, enable_range_optimization, false)
             } as c_int);
         })
+    }
+
+    /// Create Full-Text Search index parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `tokenizer_name` - Tokenizer pipeline name (e.g. `"standard"`
+    ///   for English/whitespace, `"jieba"` for Chinese). The jieba
+    ///   tokenizer requires a dict dir via
+    ///   [`set_default_jieba_dict_dir`](crate::set_default_jieba_dict_dir)
+    ///   or the `ZVEC_JIEBA_DICT_DIR` environment variable.
+    /// * `filters` - Optional list of token filter names (e.g.
+    ///   `"lowercase"`). Pass `None` or an empty slice for no filters.
+    /// * `extra_params` - Optional JSON-style extra parameters forwarded
+    ///   to the tokenizer. Pass `None` to omit.
+    ///
+    /// Returns an error if the underlying allocation or setter fails
+    /// (e.g. wrong index type, invalid tokenizer name).
+    pub fn fts(
+        tokenizer_name: &str,
+        filters: Option<&[&str]>,
+        extra_params: Option<&str>,
+    ) -> Result<Self> {
+        let ptr = unsafe {
+            ffi::zvec_index_params_create(crate::types::IndexType::Fts.into())
+        };
+        if ptr.is_null() {
+            return Err(crate::error::Error::InternalError(
+                "zvec_index_params_create returned null".into(),
+            ));
+        }
+
+        let tokenizer_c = CString::new(tokenizer_name)
+            .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?;
+        let extra_c = match extra_params {
+            Some(s) => Some(
+                CString::new(s)
+                    .map_err(|e| crate::error::Error::InvalidArgument(e.to_string()))?,
+            ),
+            None => None,
+        };
+        let extra_ptr = extra_c.as_ref().map(|c| c.as_ptr()).unwrap_or(std::ptr::null());
+
+        // Build the optional filters string array. If `filters` is None
+        // or empty we pass a null pointer (upstream keeps current value).
+        let filters_array: Option<Vec<CString>> = filters.map(|fs| {
+            fs.iter()
+                .map(|f| CString::new(*f).expect("filter name contains NUL byte"))
+                .collect()
+        });
+
+        let (filters_ptr, _filters_owned) = match &filters_array {
+            Some(arr) if !arr.is_empty() => {
+                let sa = unsafe { ffi::zvec_string_array_create(arr.len()) };
+                if sa.is_null() {
+                    return Err(crate::error::Error::InternalError(
+                        "zvec_string_array_create returned null".into(),
+                    ));
+                }
+                for (i, cstr) in arr.iter().enumerate() {
+                    unsafe { ffi::zvec_string_array_add(sa, i, cstr.as_ptr()) };
+                }
+                (sa, true)
+            }
+            _ => (
+                std::ptr::null::<ffi::zvec_string_array_t>() as *mut ffi::zvec_string_array_t,
+                false,
+            ),
+        };
+
+        let code = unsafe {
+            ffi::zvec_index_params_set_fts_params(
+                ptr,
+                tokenizer_c.as_ptr(),
+                filters_ptr as *const ffi::zvec_string_array_t,
+                extra_ptr,
+            )
+        };
+        let result = check_error(code as c_int);
+
+        // Always destroy the string array if we allocated one — upstream
+        // copies the entries during set_fts_params.
+        if !filters_ptr.is_null() {
+            unsafe { ffi::zvec_string_array_destroy(filters_ptr as *mut ffi::zvec_string_array_t) };
+        }
+
+        result?;
+        Ok(Self { ptr })
     }
 
     /// Low-level builder: create params of the given type then run `configure`.

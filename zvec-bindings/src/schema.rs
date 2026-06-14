@@ -56,6 +56,18 @@ impl FieldSchema {
         check_error(code as c_int)
     }
 
+    /// Attach index parameters (e.g. FTS) to this field schema.
+    ///
+    /// Required for FTS indexes: the index params must be set on the
+    /// field schema BEFORE the collection is created, so that documents
+    /// are indexed as they are inserted. Upstream deep-copies the params,
+    /// so the caller retains ownership of `params`.
+    pub fn set_index_params(&mut self, params: &crate::IndexParams) -> Result<()> {
+        let code =
+            unsafe { ffi::zvec_field_schema_set_index_params(self.ptr, params.ptr) };
+        check_error(code as c_int)
+    }
+
     pub fn name(&self) -> &str {
         unsafe {
             let ptr = ffi::zvec_field_schema_get_name(self.ptr);
@@ -69,6 +81,19 @@ impl FieldSchema {
 
     pub fn data_type(&self) -> DataType {
         unsafe { ffi::zvec_field_schema_get_data_type(self.ptr).into() }
+    }
+
+    /// Returns the index type declared on this field (e.g. FTS for a
+    /// string field with FTS params attached). Returns
+    /// [`IndexType::Undefined`](crate::IndexType::Undefined) if no index
+    /// params have been set.
+    pub fn index_type(&self) -> crate::IndexType {
+        unsafe { ffi::zvec_field_schema_get_index_type(self.ptr).into() }
+    }
+
+    /// Returns true if this field has any index declared.
+    pub fn has_index(&self) -> bool {
+        unsafe { ffi::zvec_field_schema_has_index(self.ptr) }
     }
 
     pub fn nullable(&self) -> bool {
