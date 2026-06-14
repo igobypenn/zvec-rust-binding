@@ -8,20 +8,29 @@ fn zvec_git_ref() -> String {
     env::var("ZVEC_GIT_REF").unwrap_or_else(|_| DEFAULT_ZVEC_GIT_REF.to_string())
 }
 
-fn ensure_zvec_source(workspace_dir: &Path) -> PathBuf {
-    let zvec_src = workspace_dir.join("vendor/zvec");
+fn ensure_zvec_source(manifest_dir: &Path, out_dir: &Path) -> PathBuf {
     let git_ref = zvec_git_ref();
 
-    if zvec_src.join("CMakeLists.txt").exists() {
-        println!("cargo:warning=zvec source already present");
-        return zvec_src;
+    // Development mode: use vendor/zvec inside the crate directory (persistent).
+    let dev_vendor = manifest_dir.join("vendor/zvec");
+    if dev_vendor.join("CMakeLists.txt").exists() {
+        println!("cargo:warning=zvec source already present (dev mode)");
+        return dev_vendor;
+    }
+
+    // Published mode (crates.io): clone into OUT_DIR so we don't create files
+    // inside the package directory (which cargo publish verification rejects).
+    let published_vendor = out_dir.join("vendor/zvec");
+    if published_vendor.join("CMakeLists.txt").exists() {
+        println!("cargo:warning=zvec source already present (OUT_DIR)");
+        return published_vendor;
     }
 
     println!(
         "cargo:warning=Cloning zvec {} (this may take a few minutes)...",
         git_ref
     );
-    let _ = std::fs::create_dir_all(zvec_src.parent().unwrap());
+    let _ = std::fs::create_dir_all(published_vendor.parent().unwrap());
 
     let status = Command::new("git")
         .args([
@@ -32,7 +41,7 @@ fn ensure_zvec_source(workspace_dir: &Path) -> PathBuf {
             &git_ref,
             "--recursive",
             "https://github.com/alibaba/zvec.git",
-            zvec_src.to_str().unwrap(),
+            published_vendor.to_str().unwrap(),
         ])
         .status()
         .expect("Failed to execute git clone. Please ensure git is installed.");
@@ -41,12 +50,11 @@ fn ensure_zvec_source(workspace_dir: &Path) -> PathBuf {
         panic!("git clone failed. Please check your network connection and that git is installed.");
     }
 
-    zvec_src
+    published_vendor
 }
 
 fn main() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_dir = manifest_dir.parent().expect("Expected parent directory");
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
 
     println!("cargo:rerun-if-env-changed=ZVEC_GIT_REF");
@@ -55,7 +63,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=ZVEC_CPU_ARCH");
     println!("cargo:rerun-if-env-changed=ZVEC_OPENMP");
 
-    let zvec_src = ensure_zvec_source(workspace_dir);
+    let zvec_src = ensure_zvec_source(&manifest_dir, &out_dir);
     let zvec_build = zvec_src.join("build");
     let zvec_lib = zvec_build.join("lib");
 

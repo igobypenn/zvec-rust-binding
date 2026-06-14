@@ -8,6 +8,7 @@ description = "Raw FFI bindings to zvec C library"
 keywords = ["vector", "database", "ffi", "bindings"]
 categories = ["database", "external-ffi-bindings"]
 links = "zvec_c"
+exclude = ["vendor/"]
 
 [build-dependencies]
 bindgen = "0.70"

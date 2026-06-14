@@ -5,15 +5,7 @@
 *.pdb
 
 # zvec source (downloaded at build time)
-vendor/zvec/
-
-# C wrapper build artifacts
-zvec-c-wrapper/build/
-zvec-c-wrapper/CMakeCache.txt
-zvec-c-wrapper/CMakeFiles/
-zvec-c-wrapper/CTestTestfile.cmake
-zvec-c-wrapper/cmake_install.cmake
-zvec-c-wrapper/Makefile
+zvec-sys/vendor/zvec/
 
 # IDE
 .vscode/
