@@ -2,10 +2,15 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ZVEC_GIT_REF: &str = "v0.2.1";
+const DEFAULT_ZVEC_GIT_REF: &str = "v0.5.0";
+
+fn zvec_git_ref() -> String {
+    env::var("ZVEC_GIT_REF").unwrap_or_else(|_| DEFAULT_ZVEC_GIT_REF.to_string())
+}
 
 fn ensure_zvec_source(workspace_dir: &Path) -> PathBuf {
     let zvec_src = workspace_dir.join("vendor/zvec");
+    let git_ref = zvec_git_ref();
 
     if zvec_src.join("CMakeLists.txt").exists() {
         println!("cargo:warning=zvec source already present");
@@ -14,7 +19,7 @@ fn ensure_zvec_source(workspace_dir: &Path) -> PathBuf {
 
     println!(
         "cargo:warning=Cloning zvec {} (this may take a few minutes)...",
-        ZVEC_GIT_REF
+        git_ref
     );
     let _ = std::fs::create_dir_all(zvec_src.parent().unwrap());
 
@@ -24,7 +29,7 @@ fn ensure_zvec_source(workspace_dir: &Path) -> PathBuf {
             "--depth",
             "1",
             "--branch",
-            ZVEC_GIT_REF,
+            &git_ref,
             "--recursive",
             "https://github.com/alibaba/zvec.git",
             zvec_src.to_str().unwrap(),
