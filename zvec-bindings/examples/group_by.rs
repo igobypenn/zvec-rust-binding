@@ -14,7 +14,7 @@ fn main() -> zvec_bindings::Result<()> {
 
     let mut schema = CollectionSchema::new("groupby_example");
     schema.add_field(VectorSchema::fp32("embedding", 4))?;
-    schema.add_field(zvec_bindings::FieldSchema::string("category"));
+    schema.add_field(zvec_bindings::FieldSchema::string("category"))?;
 
     let collection = create_and_open(dir, schema)?;
 
