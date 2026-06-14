@@ -68,6 +68,11 @@ fn main() {
     let c_api_overlay_dir = manifest_dir.join("c-api-static");
     let c_api_build = out_dir.join("c-api-static-build");
 
+    // Group-by shim directory (wraps zvec::Collection::GroupByQuery since the
+    // upstream C API does not expose group-by in v0.5.0).
+    let groupby_shim_dir = manifest_dir.join("groupby-shim");
+    let groupby_shim_build = out_dir.join("groupby-shim-build");
+
     // zvec C++ libraries (produces libzvec.a, libzvec_core.a, etc.)
     // In v0.5.0 the all-in-one library is `libzvec.a` (was `libzvec_db.a` in v0.2.1).
     let zvec_built = zvec_lib.join("libzvec.a");
@@ -94,9 +99,24 @@ fn main() {
         println!("cargo:warning=zvec_c_api_static already built");
     }
 
-    generate_bindings(&zvec_src, &zvec_build);
+    // Build the group-by shim (libzvec_groupby_shim.a).
+    let groupby_built = groupby_shim_build.join("libzvec_groupby_shim.a");
+    if !groupby_built.exists() {
+        println!("cargo:warning=Building zvec_groupby_shim...");
+        build_groupby_shim(
+            &groupby_shim_dir,
+            &groupby_shim_build,
+            &zvec_src,
+            &build_type,
+            parallel_jobs,
+        );
+    } else {
+        println!("cargo:warning=zvec_groupby_shim already built");
+    }
 
-    link_libraries(&zvec_lib, &c_api_build);
+    generate_bindings(&zvec_src, &zvec_build, &groupby_shim_dir);
+
+    link_libraries(&zvec_lib, &c_api_build, &groupby_shim_build);
 }
 
 fn build_zvec(_src: &Path, build: &Path, build_type: &str, parallel_jobs: usize) {
@@ -179,30 +199,88 @@ fn build_c_api_static(
     );
 }
 
-fn generate_bindings(zvec_src: &Path, zvec_build: &Path) {
+/// Build the group-by shim (wraps zvec::Collection::GroupByQuery, which is
+/// not exposed by the upstream C API in v0.5.0).
+fn build_groupby_shim(
+    shim_dir: &Path,
+    build: &Path,
+    zvec_src: &Path,
+    build_type: &str,
+    parallel_jobs: usize,
+) {
+    let _ = std::fs::create_dir_all(build);
+
+    run(
+        Command::new("cmake").args([
+            format!("-S{}", shim_dir.display()).as_str(),
+            format!("-B{}", build.display()).as_str(),
+            format!("-DZVEC_SRC={}", zvec_src.display()).as_str(),
+            format!("-DCMAKE_BUILD_TYPE={}", build_type).as_str(),
+        ]),
+        "cmake configure for zvec_groupby_shim",
+    );
+
+    run(
+        Command::new("cmake")
+            .args([
+                "--build",
+                build.to_str().expect("Invalid groupby-shim build path"),
+                "-j",
+                parallel_jobs.to_string().as_str(),
+            ]),
+        "build zvec_groupby_shim",
+    );
+}
+
+fn generate_bindings(zvec_src: &Path, zvec_build: &Path, groupby_shim_dir: &Path) {
     // Use the CONFIGURED c_api.h produced by upstream's cmake configure_file.
     // The source header has @ZVEC_VERSION_MAJOR@ placeholders that need substitution.
-    let header = zvec_build.join("src/generated/zvec/c_api.h");
+    let c_api_header = zvec_build.join("src/generated/zvec/c_api.h");
+    let groupby_header = groupby_shim_dir.join("include/zvec_groupby_shim.h");
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
-    if !header.exists() {
+    if !c_api_header.exists() {
         panic!(
             "Configured c_api.h not found at {}. Run cmake configure for zvec first.",
-            header.display()
+            c_api_header.display()
+        );
+    }
+    if !groupby_header.exists() {
+        panic!(
+            "Group-by shim header not found at {}.",
+            groupby_header.display()
         );
     }
 
+    // Write a combined wrapper header so bindgen processes both APIs in one pass.
+    let wrapper_header = out_path.join("wrapper.h");
+    std::fs::write(
+        &wrapper_header,
+        format!(
+            "#include \"{}\"\n#include \"{}\"\n",
+            c_api_header.display(),
+            groupby_header.display()
+        ),
+    )
+    .expect("Failed to write wrapper.h");
+
     let mut builder = bindgen::Builder::default()
-        .header(header.to_str().expect("Invalid header path"))
+        .header(wrapper_header.to_str().expect("Invalid wrapper header path"))
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate_comments(true)
         .allowlist_function("zvec_.*")
+        .allowlist_function("zvecgb_.*")
         .allowlist_type("zvec_.*")
+        .allowlist_type("zvecgb_.*")
         .allowlist_var("ZVEC_.*")
         .blocklist_type("__.*")
         .default_macro_constant_type(bindgen::MacroTypeVariation::Signed)
         .clang_arg(format!("-I{}", zvec_build.join("src/generated").display()))
-        .clang_arg(format!("-I{}", zvec_src.join("src/include").display()));
+        .clang_arg(format!("-I{}", zvec_src.join("src/include").display()))
+        .clang_arg(format!(
+            "-I{}",
+            groupby_shim_dir.join("include").display()
+        ));
 
     // Best-effort system include paths (only add if they exist on this machine).
     for path in ["/usr/include", "/usr/local/include"] {
@@ -228,13 +306,20 @@ fn generate_bindings(zvec_src: &Path, zvec_build: &Path) {
         .expect("Couldn't write bindings!");
 }
 
-fn link_libraries(zvec_lib: &Path, c_api_build: &Path) {
+fn link_libraries(zvec_lib: &Path, c_api_build: &Path, groupby_shim_build: &Path) {
     // Static archive of upstream c_api.cc (compiled by our overlay)
     println!(
         "cargo:rustc-link-search=native={}",
         c_api_build.display()
     );
     println!("cargo:rustc-link-lib=static:+whole-archive=zvec_c_api_static");
+
+    // Group-by shim
+    println!(
+        "cargo:rustc-link-search=native={}",
+        groupby_shim_build.display()
+    );
+    println!("cargo:rustc-link-lib=static:+whole-archive=zvec_groupby_shim");
 
     // zvec component libraries path
     println!("cargo:rustc-link-search=native={}", zvec_lib.display());
