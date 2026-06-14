@@ -8,7 +8,7 @@
 //! - Full API coverage for vector similarity search
 //! - Safe Rust API with proper error handling
 //! - Support for dense and sparse vectors
-//! - HNSW, IVF, and FLAT index types
+//! - HNSW, IVF, FLAT, and FTS index types
 //! - Static linking for easy deployment
 //! - Optional thread-safe [`SharedCollection`] via `sync` feature
 //!
@@ -125,7 +125,10 @@ pub use collection::CollectionStats;
 pub use collection::IndexParams;
 pub use doc::Doc;
 pub use error::{Error, Result, StatusCode};
-pub use query::{GroupByVectorQuery, HnswQueryParam, IVFQueryParam, VectorQuery};
+pub use query::{
+    FlatQueryParam, FtsQueryParam, GroupByVectorQuery, HnswQueryParam, IVFQueryParam,
+    QueryParam, VectorQuery,
+};
 pub use rerank::{RrfReRanker, WeightedReRanker};
 pub use schema::{CollectionSchema, FieldSchema, VectorSchema};
 pub use types::{DataType, IndexType, LogLevel, LogType, MetricType, QuantizeType};
@@ -133,36 +136,22 @@ pub use types::{DataType, IndexType, LogLevel, LogType, MetricType, QuantizeType
 #[cfg(feature = "sync")]
 pub use sync::{create_and_open_shared, open_shared, SharedCollection};
 
+/// Initialize the zvec library with default configuration.
+///
+/// Calls `zvec_initialize(NULL)` (zvec v0.5.0 C API). Safe to call once at
+/// program start; the library also auto-initializes on first use.
 pub fn init() -> Result<()> {
-    let success = unsafe { ffi::zvec_init() };
-    if success {
-        Ok(())
-    } else {
-        Err(Error::InternalError("Failed to initialize zvec".into()))
-    }
+    let code = unsafe { ffi::zvec_initialize(std::ptr::null()) };
+    crate::error::check_error(code as std::os::raw::c_int)
 }
 
+/// List registered metric type names.
+///
+/// **Deprecated:** the upstream zvec v0.5.0 C API does not expose a metric
+/// listing function. This always returns an empty `Vec`.
+#[deprecated(note = "upstream zvec v0.5.0 does not expose a metric listing API")]
 pub fn list_registered_metrics() -> Vec<String> {
-    let mut metrics_ptr: *mut *const std::os::raw::c_char = std::ptr::null_mut();
-    let count = unsafe { ffi::zvec_list_registered_metrics(&mut metrics_ptr) };
-
-    if metrics_ptr.is_null() || count <= 0 {
-        return Vec::new();
-    }
-
-    let mut result = Vec::with_capacity(count as usize);
-    for i in 0..count as usize {
-        unsafe {
-            let ptr = *metrics_ptr.add(i);
-            if !ptr.is_null() {
-                let cstr = std::ffi::CStr::from_ptr(ptr);
-                if let Ok(s) = cstr.to_str() {
-                    result.push(s.to_string());
-                }
-            }
-        }
-    }
-    result
+    Vec::new()
 }
 
 pub fn create_and_open<P: AsRef<std::path::Path>>(

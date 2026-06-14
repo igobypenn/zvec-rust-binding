@@ -469,9 +469,11 @@ mod coverage_tests {
 
     #[test]
     fn test_list_registered_metrics() {
+        // upstream zvec v0.5.0 does not expose a metric listing C API, so
+        // list_registered_metrics() now always returns an empty Vec.
+        // The function is retained for backward source compatibility.
         let metrics = zvec_bindings::list_registered_metrics();
-        assert!(!metrics.is_empty());
-        assert!(metrics.contains(&"L2".to_string()) || metrics.contains(&"Euclidean".to_string()));
+        assert!(metrics.is_empty());
     }
 
     #[test]
@@ -716,15 +718,18 @@ mod coverage_tests {
 
     #[test]
     fn test_status_code_variants() {
-        assert_eq!(StatusCode::Ok as u32, 0);
-        assert_eq!(StatusCode::NotFound as u32, 1);
-        assert_eq!(StatusCode::AlreadyExists as u32, 2);
-        assert_eq!(StatusCode::InvalidArgument as u32, 3);
-        assert_eq!(StatusCode::NotSupported as u32, 4);
-        assert_eq!(StatusCode::InternalError as u32, 5);
-        assert_eq!(StatusCode::PermissionDenied as u32, 6);
-        assert_eq!(StatusCode::FailedPrecondition as u32, 7);
-        assert_eq!(StatusCode::Unknown as u32, 8);
+        // Match upstream zvec_error_code_t values (v0.5.0 c_api.h).
+        assert_eq!(StatusCode::Ok as i32, 0);
+        assert_eq!(StatusCode::NotFound as i32, 1);
+        assert_eq!(StatusCode::AlreadyExists as i32, 2);
+        assert_eq!(StatusCode::InvalidArgument as i32, 3);
+        assert_eq!(StatusCode::PermissionDenied as i32, 4);
+        assert_eq!(StatusCode::FailedPrecondition as i32, 5);
+        assert_eq!(StatusCode::ResourceExhausted as i32, 6);
+        assert_eq!(StatusCode::Unavailable as i32, 7);
+        assert_eq!(StatusCode::InternalError as i32, 8);
+        assert_eq!(StatusCode::NotSupported as i32, 9);
+        assert_eq!(StatusCode::Unknown as i32, 10);
     }
 
     #[test]
@@ -802,7 +807,9 @@ mod coverage_tests {
 
         let stats = collection.stats()?;
         assert_eq!(stats.doc_count(), 2);
-        let _ = stats.memory_usage();
+        // memory_usage() was dropped in v0.5.0: upstream CollectionStats is now
+        // an opaque accessor with only doc_count / index_count / index_name /
+        // index_completeness.
 
         Ok(())
     }

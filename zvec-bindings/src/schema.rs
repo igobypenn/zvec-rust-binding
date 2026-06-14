@@ -1,6 +1,7 @@
 use std::ffi::CString;
+use std::os::raw::c_int;
 
-use crate::error::{check_status, Result};
+use crate::error::{check_error, Result};
 use crate::ffi;
 use crate::types::DataType;
 
@@ -12,14 +13,16 @@ pub struct FieldSchema {
 impl FieldSchema {
     pub fn new(name: &str, data_type: DataType) -> Self {
         let name_c = CString::new(name).expect("name contains NUL byte");
-        let ptr = unsafe { ffi::zvec_field_schema_new(name_c.as_ptr(), data_type.into()) };
+        let ptr = unsafe {
+            ffi::zvec_field_schema_create(name_c.as_ptr(), data_type.into(), false, 0)
+        };
         Self { ptr, owned: true }
     }
 
     pub fn new_vector(name: &str, data_type: DataType, dimension: u32) -> Self {
         let name_c = CString::new(name).expect("name contains NUL byte");
         let ptr = unsafe {
-            ffi::zvec_field_schema_new_with_dimension(name_c.as_ptr(), data_type.into(), dimension)
+            ffi::zvec_field_schema_create(name_c.as_ptr(), data_type.into(), false, dimension)
         };
         Self { ptr, owned: true }
     }
@@ -48,13 +51,14 @@ impl FieldSchema {
         Self::new(name, DataType::String)
     }
 
-    pub fn set_nullable(&mut self, nullable: bool) {
-        unsafe { ffi::zvec_field_schema_set_nullable(self.ptr, nullable) };
+    pub fn set_nullable(&mut self, nullable: bool) -> Result<()> {
+        let code = unsafe { ffi::zvec_field_schema_set_nullable(self.ptr, nullable) };
+        check_error(code as c_int)
     }
 
     pub fn name(&self) -> &str {
         unsafe {
-            let ptr = ffi::zvec_field_schema_name(self.ptr);
+            let ptr = ffi::zvec_field_schema_get_name(self.ptr);
             if ptr.is_null() {
                 ""
             } else {
@@ -64,22 +68,22 @@ impl FieldSchema {
     }
 
     pub fn data_type(&self) -> DataType {
-        unsafe { ffi::zvec_field_schema_data_type(self.ptr).into() }
+        unsafe { ffi::zvec_field_schema_get_data_type(self.ptr).into() }
     }
 
     pub fn nullable(&self) -> bool {
-        unsafe { ffi::zvec_field_schema_nullable(self.ptr) }
+        unsafe { ffi::zvec_field_schema_is_nullable(self.ptr) }
     }
 
     pub fn dimension(&self) -> u32 {
-        unsafe { ffi::zvec_field_schema_dimension(self.ptr) }
+        unsafe { ffi::zvec_field_schema_get_dimension(self.ptr) }
     }
 }
 
 impl Drop for FieldSchema {
     fn drop(&mut self) {
         if self.owned && !self.ptr.is_null() {
-            unsafe { ffi::zvec_field_schema_free(self.ptr) };
+            unsafe { ffi::zvec_field_schema_destroy(self.ptr) };
         }
     }
 }
@@ -92,15 +96,20 @@ pub struct CollectionSchema {
 impl CollectionSchema {
     pub fn new(name: &str) -> Self {
         let name_c = CString::new(name).expect("name contains NUL byte");
-        let ptr = unsafe { ffi::zvec_collection_schema_new(name_c.as_ptr()) };
+        let ptr = unsafe { ffi::zvec_collection_schema_create(name_c.as_ptr()) };
         Self { ptr, owned: true }
     }
 
+    /// Wrap a borrowed schema pointer (e.g. returned by `collection.schema()`).
+    /// The wrapper does not own the pointer and will not destroy it on drop.
     pub(crate) fn from_ptr(ptr: *mut ffi::zvec_collection_schema_t) -> Self {
         Self { ptr, owned: false }
     }
 
     /// Add a field to the collection schema.
+    ///
+    /// The schema clones the field internally; the caller retains ownership
+    /// of the passed-in `FieldSchema`.
     ///
     /// Accepts either `FieldSchema` or `VectorSchema` (conversion is automatic).
     ///
@@ -116,13 +125,14 @@ impl CollectionSchema {
     /// ```
     pub fn add_field(&mut self, field: impl Into<FieldSchema>) -> Result<()> {
         let field = field.into();
-        let status = unsafe { ffi::zvec_collection_schema_add_field(self.ptr, field.ptr) };
-        check_status(status)
+        let code =
+            unsafe { ffi::zvec_collection_schema_add_field(self.ptr, field.ptr) };
+        check_error(code as c_int)
     }
 
     pub fn name(&self) -> &str {
         unsafe {
-            let ptr = ffi::zvec_collection_schema_name(self.ptr);
+            let ptr = ffi::zvec_collection_schema_get_name(self.ptr);
             if ptr.is_null() {
                 ""
             } else {
@@ -132,46 +142,65 @@ impl CollectionSchema {
     }
 
     pub fn field_names(&self) -> Vec<String> {
-        let arr = unsafe { ffi::zvec_collection_schema_field_names(self.ptr) };
-        let mut names = Vec::with_capacity(arr.count);
-        for i in 0..arr.count {
-            unsafe {
-                if !arr.strings.add(i).is_null() {
-                    let s = std::ffi::CStr::from_ptr(*arr.strings.add(i));
-                    if let Ok(name) = s.to_str() {
+        unsafe {
+            let mut names_ptr: *mut *const std::os::raw::c_char = std::ptr::null_mut();
+            let mut count: usize = 0;
+            let code = ffi::zvec_collection_schema_get_all_field_names(
+                self.ptr,
+                &mut names_ptr,
+                &mut count,
+            );
+            if code != ffi::zvec_error_code_t_ZVEC_OK || names_ptr.is_null() {
+                return Vec::new();
+            }
+            let mut names = Vec::with_capacity(count);
+            for i in 0..count {
+                let s = *names_ptr.add(i);
+                if !s.is_null() {
+                    if let Ok(name) = std::ffi::CStr::from_ptr(s).to_str() {
                         names.push(name.to_string());
                     }
                 }
             }
+            ffi::zvec_free(names_ptr as *mut _);
+            names
         }
-        let mut arr_mut = arr;
-        unsafe { ffi::zvec_string_array_free(&mut arr_mut) };
-        names
     }
 
     pub fn vector_field_names(&self) -> Vec<String> {
-        let arr = unsafe { ffi::zvec_collection_schema_vector_field_names(self.ptr) };
-        let mut names = Vec::with_capacity(arr.count);
-        for i in 0..arr.count {
-            unsafe {
-                if !arr.strings.add(i).is_null() {
-                    let s = std::ffi::CStr::from_ptr(*arr.strings.add(i));
-                    if let Ok(name) = s.to_str() {
-                        names.push(name.to_string());
+        unsafe {
+            let mut fields_ptr: *mut *mut ffi::zvec_field_schema_t = std::ptr::null_mut();
+            let mut count: usize = 0;
+            let code = ffi::zvec_collection_schema_get_vector_fields(
+                self.ptr,
+                &mut fields_ptr,
+                &mut count,
+            );
+            if code != ffi::zvec_error_code_t_ZVEC_OK || fields_ptr.is_null() {
+                return Vec::new();
+            }
+            let mut names = Vec::with_capacity(count);
+            for i in 0..count {
+                let field = *fields_ptr.add(i);
+                if !field.is_null() {
+                    let name_ptr = ffi::zvec_field_schema_get_name(field);
+                    if !name_ptr.is_null() {
+                        if let Ok(name) = std::ffi::CStr::from_ptr(name_ptr).to_str() {
+                            names.push(name.to_string());
+                        }
                     }
                 }
             }
+            ffi::zvec_free(fields_ptr as *mut _);
+            names
         }
-        let mut arr_mut = arr;
-        unsafe { ffi::zvec_string_array_free(&mut arr_mut) };
-        names
     }
 }
 
 impl Drop for CollectionSchema {
     fn drop(&mut self) {
         if self.owned && !self.ptr.is_null() {
-            unsafe { ffi::zvec_collection_schema_free(self.ptr) };
+            unsafe { ffi::zvec_collection_schema_destroy(self.ptr) };
         }
     }
 }

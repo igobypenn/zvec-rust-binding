@@ -406,6 +406,7 @@ fn link_libraries(zvec_lib: &Path, c_api_build: &Path, groupby_shim_build: &Path
 
     // Third-party dependencies (whole-archive for test linking).
     // Note: 'z', 'utf8proc', 're2', 'thrift' are included in arrow_bundled_dependencies.
+    // FastPFOR is needed by v0.5.0 FTS (bit-packing for posting lists).
     let thirdparty_libs = [
         "parquet",
         "arrow_acero",
@@ -428,6 +429,7 @@ fn link_libraries(zvec_lib: &Path, c_api_build: &Path, groupby_shim_build: &Path
         "glog",
         "gflags_nothreads",
         "antlr4-runtime",
+        "FastPFOR",
     ];
     for lib in &thirdparty_libs {
         println!("cargo:rustc-link-lib=static:+whole-archive={}", lib);
