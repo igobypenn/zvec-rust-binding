@@ -53,6 +53,71 @@ fn ensure_zvec_source(manifest_dir: &Path, out_dir: &Path) -> PathBuf {
     published_vendor
 }
 
+fn patch_zvec_source(zvec_src: &Path) {
+    patch_arrow_libtool_check(zvec_src);
+    patch_cstdint_includes(zvec_src);
+}
+
+fn patch_arrow_libtool_check(zvec_src: &Path) {
+    let build_utils =
+        zvec_src.join("thirdparty/arrow/apache-arrow-21.0.0/cpp/cmake_modules/BuildUtils.cmake");
+    let Ok(contents) = std::fs::read_to_string(&build_utils) else {
+        return;
+    };
+
+    let old = r#"if(NOT "${LIBTOOL_V_OUTPUT}" MATCHES ".*cctools-([0-9.]+).*")"#;
+    let new = r#"if(NOT "${LIBTOOL_V_OUTPUT}" MATCHES ".*cctools(_ld)?-([0-9.]+).*")"#;
+    if !contents.contains(old) {
+        return;
+    }
+
+    let patched = contents.replace(old, new);
+    std::fs::write(&build_utils, patched)
+        .unwrap_or_else(|err| panic!("failed to patch {}: {err}", build_utils.display()));
+}
+
+fn patch_cstdint_includes(zvec_src: &Path) {
+    patch_include(
+        &zvec_src.join("thirdparty/rocksdb/rocksdb-8.1.1/db/blob/blob_file_meta.h"),
+        "#include <cassert>\n",
+        "#include <cassert>\n#include <cstdint>\n",
+    );
+    patch_include(
+        &zvec_src.join("thirdparty/rocksdb/rocksdb-8.1.1/include/rocksdb/trace_record_result.h"),
+        "#include <string>\n",
+        "#include <cstdint>\n#include <string>\n",
+    );
+    patch_include(
+        &zvec_src.join("thirdparty/rocksdb/rocksdb-8.1.1/include/rocksdb/trace_record.h"),
+        "#include <memory>\n",
+        "#include <cstdint>\n#include <memory>\n",
+    );
+    patch_include(
+        &zvec_src.join("thirdparty/rocksdb/rocksdb-8.1.1/include/rocksdb/utilities/checkpoint.h"),
+        "#include <string>\n",
+        "#include <cstdint>\n#include <string>\n",
+    );
+    patch_include(
+        &zvec_src.join("src/db/index/storage/wal/wal_file.h"),
+        "#include <vector>\n",
+        "#include <vector>\n#include <cstdint>\n",
+    );
+}
+
+fn patch_include(path: &Path, old: &str, new: &str) {
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return;
+    };
+
+    if contents.contains("#include <cstdint>") || !contents.contains(old) {
+        return;
+    }
+
+    let patched = contents.replace(old, new);
+    std::fs::write(path, patched)
+        .unwrap_or_else(|err| panic!("failed to patch {}: {err}", path.display()));
+}
+
 fn main() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
@@ -64,6 +129,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=ZVEC_OPENMP");
 
     let zvec_src = ensure_zvec_source(&manifest_dir, &out_dir);
+    patch_zvec_source(&zvec_src);
     let zvec_build = zvec_src.join("build");
     let zvec_lib = zvec_build.join("lib");
 
@@ -132,6 +198,7 @@ fn build_zvec(_src: &Path, build: &Path, build_type: &str, parallel_jobs: usize)
 
     let mut cmake_args = vec![
         format!("-DCMAKE_BUILD_TYPE={}", build_type),
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5".to_string(),
         "-DBUILD_PYTHON_BINDINGS=OFF".to_string(),
         "-DBUILD_TOOLS=OFF".to_string(),
         // C bindings are built as a shared library by upstream; we don't use that
@@ -190,6 +257,7 @@ fn build_c_api_static(
             format!("-DZVEC_SRC={}", zvec_src.display()).as_str(),
             format!("-DZVEC_BUILD={}", zvec_build.display()).as_str(),
             format!("-DCMAKE_BUILD_TYPE={}", build_type).as_str(),
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
         ]),
         "cmake configure for zvec_c_api_static",
     );
@@ -222,6 +290,7 @@ fn build_groupby_shim(
             format!("-B{}", build.display()).as_str(),
             format!("-DZVEC_SRC={}", zvec_src.display()).as_str(),
             format!("-DCMAKE_BUILD_TYPE={}", build_type).as_str(),
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
         ]),
         "cmake configure for zvec_groupby_shim",
     );
@@ -439,7 +508,22 @@ fn link_libraries(zvec_lib: &Path, c_api_build: &Path, groupby_shim_build: &Path
     }
 
     // System libraries
-    println!("cargo:rustc-link-lib=stdc++");
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+
+    // Boost.Locale pulls ICU symbols on Linux, but its static archive does not
+    // carry transitive link metadata into downstream Rust test binaries.
+    if target_os == "linux" {
+        println!("cargo:rustc-link-lib=icui18n");
+        println!("cargo:rustc-link-lib=icuuc");
+        println!("cargo:rustc-link-lib=icudata");
+    }
+
+    // C++ runtime: libc++ on macOS, libstdc++ elsewhere.
+    if target_os == "macos" {
+        println!("cargo:rustc-link-lib=c++");
+    } else {
+        println!("cargo:rustc-link-lib=stdc++");
+    }
     println!("cargo:rustc-link-lib=pthread");
     println!("cargo:rustc-link-lib=dl");
     println!("cargo:rustc-link-lib=m");
