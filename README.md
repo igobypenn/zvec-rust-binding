@@ -186,7 +186,6 @@ fn main() -> zvec_bindings::Result<()> {
 | Feature | Description |
 |---------|-------------|
 | `sync` | Enables `SharedCollection` for thread-safe multi-threaded access |
-| `static` | Statically links the zvec C++ library |
 
 ## API Coverage
 

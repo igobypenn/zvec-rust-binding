@@ -261,7 +261,6 @@ The `zvec` crate supports the following features:
 | Feature | Description |
 |---------|-------------|
 | `sync` | Enables `SharedCollection` for thread-safe multi-threaded access |
-| `static` | Statically links the zvec C++ library |
 
 ### Using Features
 
