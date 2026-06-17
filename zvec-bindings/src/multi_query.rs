@@ -51,7 +51,7 @@ impl SubQuery {
             ffi::zvec_sub_query_set_query_vector(
                 self.ptr,
                 data.as_ptr() as *const std::os::raw::c_void,
-                data.len() * std::mem::size_of::<f32>(),
+                std::mem::size_of_val(data),
             )
         };
         check_error(code as c_int)?;

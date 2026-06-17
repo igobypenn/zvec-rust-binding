@@ -153,7 +153,7 @@ impl Doc {
             field,
             DataType::VectorFp32,
             vector.as_ptr() as *const std::os::raw::c_void,
-            vector.len() * std::mem::size_of::<f32>(),
+            std::mem::size_of_val(vector),
         )
     }
 
@@ -173,7 +173,7 @@ impl Doc {
         let nnz = indices.len();
         let mut buf: Vec<u8> = Vec::with_capacity(
             std::mem::size_of::<u32>()
-                + nnz * std::mem::size_of::<u32>()
+                + std::mem::size_of_val(indices)
                 + nnz * std::mem::size_of::<f32>(),
         );
         buf.extend_from_slice(&(nnz as u32).to_ne_bytes());

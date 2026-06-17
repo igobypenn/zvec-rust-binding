@@ -89,7 +89,7 @@ mod coverage_tests {
         let mut doc = Doc::id("test_pk");
         let _ = doc.pk();
 
-        doc.set_pk("new_pk");
+        let _ = doc.set_pk("new_pk");
         let _ = doc.pk();
 
         let doc2 = Doc::with_pk("pk2");
@@ -165,7 +165,7 @@ mod coverage_tests {
     fn test_field_schema_nullable() {
         let mut fs = FieldSchema::string("test");
         assert!(!fs.nullable());
-        fs.set_nullable(true);
+        let _ = fs.set_nullable(true);
         assert!(fs.nullable());
     }
 
@@ -468,6 +468,7 @@ mod coverage_tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_list_registered_metrics() {
         // upstream zvec v0.5.0 does not expose a metric listing C API, so
         // list_registered_metrics() now always returns an empty Vec.

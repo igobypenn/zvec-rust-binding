@@ -692,7 +692,7 @@ impl IndexParams {
         // Always destroy the string array if we allocated one — upstream
         // copies the entries during set_fts_params.
         if !filters_ptr.is_null() {
-            unsafe { ffi::zvec_string_array_destroy(filters_ptr as *mut ffi::zvec_string_array_t) };
+            unsafe { ffi::zvec_string_array_destroy(filters_ptr) };
         }
 
         result?;
