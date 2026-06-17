@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  lint:
+    name: Lint (fmt + clippy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake git pkg-config liblz4-dev libaio-dev
+
+      - name: Cache compiled zvec C++ artifacts
+        uses: actions/cache@v4
+        with:
+          path: zvec-sys/vendor/zvec/build
+          key: zvec-cpp-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('zvec-sys/build.rs', 'Cargo.lock') }}
+          restore-keys: |
+            zvec-cpp-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-features --all-targets -- -D warnings
+
+  build-test:
+    name: Build & test (${{ matrix.label }})
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            os: ubuntu-24.04
+            arch: amd64
+            swap_name: swap-x86_64
+            parallel: "2"
+          - label: linux-arm64
+            os: ubuntu-24.04-arm
+            arch: arm64
+            swap_name: swap-arm64
+            parallel: "2"
+          - label: macos-arm64
+            os: macos-14
+            arch: arm64
+            parallel: "1"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      ZVEC_BUILD_PARALLEL: ${{ matrix.parallel }}
+      CARGO_BUILD_JOBS: ${{ matrix.parallel }}
+      CARGO_TEST_JOBS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add swap space (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "=== Current memory/swap state ==="
+          free -h
+          # Per-arch swap filename (swap-x86_64 / swap-arm64). The runner image
+          # already ships with /swapfile in use as swap, and overwriting it
+          # fails with ETXTBSY; a per-arch name also avoids any contention
+          # between concurrent matrix jobs sharing a runner.
+          SWAP=/${{ matrix.swap_name }}
+          if [ -f "$SWAP" ]; then
+            sudo swapoff "$SWAP" 2>/dev/null || true
+            sudo rm -f "$SWAP"
+          fi
+          sudo fallocate -l 8G "$SWAP" || sudo dd if=/dev/zero of="$SWAP" bs=1M count=8192
+          sudo chmod 600 "$SWAP"
+          sudo mkswap "$SWAP"
+          sudo swapon "$SWAP" || true
+          echo "=== After adding $SWAP ==="
+          free -h
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake git pkg-config liblz4-dev libaio-dev
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake lz4
+
+      - name: Cache compiled zvec C++ artifacts
+        id: cache-zvec-cpp
+        uses: actions/cache@v4
+        with:
+          path: zvec-sys/vendor/zvec/build
+          key: zvec-cpp-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('zvec-sys/build.rs', 'Cargo.lock') }}
+          restore-keys: |
+            zvec-cpp-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo build --release
+        run: cargo build --release --all-targets
+
+      - name: cargo test --release (default)
+        run: cargo test --release
+
+      - name: cargo test --release --features sync
+        run: cargo test --release --features sync

@@ -19,5 +19,4 @@ proptest = "1.4"
 
 [features]
 default = []
-static = ["zvec-sys/static"]
 sync = []

@@ -4,9 +4,11 @@ use crate::ffi::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i32)]
+#[derive(Default)]
 pub enum LogLevel {
     Debug = 0,
     Info = 1,
+    #[default]
     Warn = 2,
     Error = 3,
     Fatal = 4,
@@ -16,20 +18,14 @@ impl LogLevel {
     pub const Warning: Self = Self::Warn;
 }
 
-impl Default for LogLevel {
-    fn default() -> Self {
-        Self::Warn
-    }
-}
-
 impl From<zvec_log_level_t> for LogLevel {
     fn from(t: zvec_log_level_t) -> Self {
         match t {
-            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_DEBUG as u32 => LogLevel::Debug,
-            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_INFO as u32 => LogLevel::Info,
-            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_WARN as u32 => LogLevel::Warn,
-            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_ERROR as u32 => LogLevel::Error,
-            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_FATAL as u32 => LogLevel::Fatal,
+            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_DEBUG => LogLevel::Debug,
+            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_INFO => LogLevel::Info,
+            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_WARN => LogLevel::Warn,
+            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_ERROR => LogLevel::Error,
+            x if x == zvec_log_level_t_ZVEC_LOG_LEVEL_FATAL => LogLevel::Fatal,
             _ => LogLevel::Warn,
         }
     }
@@ -38,33 +34,29 @@ impl From<zvec_log_level_t> for LogLevel {
 impl From<LogLevel> for zvec_log_level_t {
     fn from(t: LogLevel) -> Self {
         match t {
-            LogLevel::Debug => zvec_log_level_t_ZVEC_LOG_LEVEL_DEBUG as u32,
-            LogLevel::Info => zvec_log_level_t_ZVEC_LOG_LEVEL_INFO as u32,
-            LogLevel::Warn => zvec_log_level_t_ZVEC_LOG_LEVEL_WARN as u32,
-            LogLevel::Error => zvec_log_level_t_ZVEC_LOG_LEVEL_ERROR as u32,
-            LogLevel::Fatal => zvec_log_level_t_ZVEC_LOG_LEVEL_FATAL as u32,
+            LogLevel::Debug => zvec_log_level_t_ZVEC_LOG_LEVEL_DEBUG,
+            LogLevel::Info => zvec_log_level_t_ZVEC_LOG_LEVEL_INFO,
+            LogLevel::Warn => zvec_log_level_t_ZVEC_LOG_LEVEL_WARN,
+            LogLevel::Error => zvec_log_level_t_ZVEC_LOG_LEVEL_ERROR,
+            LogLevel::Fatal => zvec_log_level_t_ZVEC_LOG_LEVEL_FATAL,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i32)]
+#[derive(Default)]
 pub enum LogType {
+    #[default]
     Console = 0,
     File = 1,
-}
-
-impl Default for LogType {
-    fn default() -> Self {
-        Self::Console
-    }
 }
 
 impl From<zvec_log_type_t> for LogType {
     fn from(t: zvec_log_type_t) -> Self {
         match t {
-            x if x == zvec_log_type_t_ZVEC_LOG_TYPE_CONSOLE as u32 => LogType::Console,
-            x if x == zvec_log_type_t_ZVEC_LOG_TYPE_FILE as u32 => LogType::File,
+            x if x == zvec_log_type_t_ZVEC_LOG_TYPE_CONSOLE => LogType::Console,
+            x if x == zvec_log_type_t_ZVEC_LOG_TYPE_FILE => LogType::File,
             _ => LogType::Console,
         }
     }
@@ -73,8 +65,8 @@ impl From<zvec_log_type_t> for LogType {
 impl From<LogType> for zvec_log_type_t {
     fn from(t: LogType) -> Self {
         match t {
-            LogType::Console => zvec_log_type_t_ZVEC_LOG_TYPE_CONSOLE as u32,
-            LogType::File => zvec_log_type_t_ZVEC_LOG_TYPE_FILE as u32,
+            LogType::Console => zvec_log_type_t_ZVEC_LOG_TYPE_CONSOLE,
+            LogType::File => zvec_log_type_t_ZVEC_LOG_TYPE_FILE,
         }
     }
 }

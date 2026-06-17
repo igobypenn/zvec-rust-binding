@@ -15,4 +15,3 @@ bindgen = "0.70"
 
 [features]
 default = []
-static = []

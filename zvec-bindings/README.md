@@ -97,7 +97,6 @@ zvec-bindings = { version = "0.3.1", features = ["sync"] }
 | Feature | Description |
 |---------|-------------|
 | `sync` | Enables `SharedCollection` for thread-safe multi-threaded access |
-| `static` | Statically links the zvec C++ library |
 
 ## API Coverage
 

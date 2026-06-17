@@ -36,3 +36,6 @@ target/criterion/
 # OS
 .DS_Store
 Thumbs.db
+
+# Tooling state
+.opencode/
