@@ -54,26 +54,14 @@ fn ensure_zvec_source(manifest_dir: &Path, out_dir: &Path) -> PathBuf {
 }
 
 fn patch_zvec_source(zvec_src: &Path) {
-    patch_arrow_libtool_check(zvec_src);
+    // Note: zvec v0.5.0 ships its own `thirdparty/arrow/arrow.patch` that
+    // fixes the libtool version regex on newer Xcode toolchains. We do NOT
+    // patch BuildUtils.cmake ourselves anymore — doing so caused
+    // `apply_patch_once("arrow_fix", ...)` to fail on a fresh source tree
+    // because the patch context no longer matched. The upstream fix
+    // (`cctools[-_a-z]*([0-9.]+)`) is strictly more permissive than the
+    // regex we used to inject.
     patch_cstdint_includes(zvec_src);
-}
-
-fn patch_arrow_libtool_check(zvec_src: &Path) {
-    let build_utils =
-        zvec_src.join("thirdparty/arrow/apache-arrow-21.0.0/cpp/cmake_modules/BuildUtils.cmake");
-    let Ok(contents) = std::fs::read_to_string(&build_utils) else {
-        return;
-    };
-
-    let old = r#"if(NOT "${LIBTOOL_V_OUTPUT}" MATCHES ".*cctools-([0-9.]+).*")"#;
-    let new = r#"if(NOT "${LIBTOOL_V_OUTPUT}" MATCHES ".*cctools(_ld)?-([0-9.]+).*")"#;
-    if !contents.contains(old) {
-        return;
-    }
-
-    let patched = contents.replace(old, new);
-    std::fs::write(&build_utils, patched)
-        .unwrap_or_else(|err| panic!("failed to patch {}: {err}", build_utils.display()));
 }
 
 fn patch_cstdint_includes(zvec_src: &Path) {
