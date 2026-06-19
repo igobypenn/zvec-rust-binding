@@ -72,7 +72,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! zvec-bindings = { version = "0.1", features = ["sync"] }
+//! zvec-bindings = { version = "0.4.1", features = ["sync"] }
 //! ```
 //!
 //! ```rust,no_run

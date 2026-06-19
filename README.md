@@ -315,6 +315,20 @@ Apache-2.0
 
 ## Changelog
 
+### 0.4.1 — Publish readiness & cross-platform CI
+
+**Build & packaging:**
+- `zvec-sys` made publishable to crates.io (`vendor/` excluded; build works on fresh checkout).
+- Ported static-zvec build fixes to the v0.5.0 C API.
+- Removed the dead `static` cargo feature flag.
+
+**CI:**
+- Added cross-platform build/test workflow: linux x86_64, linux arm64, macos arm64.
+- Fixed C++ build failures on fresh CI checkouts.
+- Fixed pre-existing clippy warnings under `-D warnings`.
+
+No API changes since 0.4.0.
+
 ### 0.4.0 — Migration to zvec v0.5.0 upstream C API
 
 **Architecture changes:**

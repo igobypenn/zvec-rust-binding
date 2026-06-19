@@ -89,7 +89,7 @@ For multi-threaded applications, enable the `sync` feature:
 
 ```toml
 [dependencies]
-zvec-bindings = { version = "0.3.1", features = ["sync"] }
+zvec-bindings = { version = "0.4.1", features = ["sync"] }
 ```
 
 ## Feature Flags
